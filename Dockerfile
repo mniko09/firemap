@@ -1,4 +1,6 @@
-FROM python:3.12-slim
+FROM python:3.12
+# Image complete (pas -slim) : rasterio/GDAL dependent dynamiquement de
+# librairies systeme (libexpat, ...) absentes de l'image -slim.
 
 WORKDIR /app
 
