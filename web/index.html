@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIREMAP - Le Muy</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+  #map { height: 100%; width: 100%; }
+  #title {
+    position: absolute; top: 12px; left: 50px; z-index: 1000;
+    background: white; padding: 8px 14px; border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3); font-size: 16px; font-weight: 600; max-width: 340px;
+  }
+  #title span { display: block; font-size: 12px; font-weight: 400; color: #555; margin-top: 2px; }
+  #freshness {
+    position: absolute; bottom: 12px; left: 12px; z-index: 1000;
+    background: rgba(255,255,255,0.92); padding: 8px 12px; border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3); font-size: 11px; color: #444; max-width: 320px; line-height: 1.5;
+  }
+  #freshness b { color: #c0392b; }
+  .legend {
+    background: white; padding: 10px 12px; border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3); line-height: 1.6; font-size: 13px;
+  }
+  .legend .swatch {
+    display: inline-block; width: 14px; height: 14px; margin-right: 6px;
+    border-radius: 3px; vertical-align: middle;
+  }
+  .legend .prio-swatch {
+    display: inline-block; width: 14px; height: 10px; margin-right: 6px;
+    border: 2px solid black; vertical-align: middle;
+  }
+  .popup-title { font-weight: 600; margin-bottom: 4px; }
+  .popup-action { margin-top: 6px; padding: 6px 8px; background: #fdf3e7; border-left: 3px solid #e67e22; }
+  .leaflet-control-layers { font-size: 13px; max-height: 80vh; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div id="title">
+  FIREMAP - Risque incendie
+  <span>Commune du Muy (Var) - prototype SELVERT</span>
+</div>
+<div id="freshness">Chargement des metadonnees...</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const RISK_LABELS = {1: "Faible", 2: "Modéré", 3: "Élevé", 4: "Très élevé"};
+const RISK_COLORS = {1: "#2ca02c", 2: "#f1c40f", 3: "#e67e22", 4: "#c0392b"};
+
+const map = L.map('map');
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19,
+}).addTo(map);
+
+async function init() {
+  const [layerDefs, bounds, commune, priorites, metadata] = await Promise.all([
+    fetch('/api/layers').then(r => r.json()),
+    fetch('/api/bounds').then(r => r.json()),
+    fetch('/api/commune').then(r => r.json()),
+    fetch('/api/priorites').then(r => r.json()),
+    fetch('/api/metadata').then(r => r.json()),
+  ]);
+
+  const imageBounds = [[bounds.south, bounds.west], [bounds.north, bounds.east]];
+
+  const communeLayer = L.geoJSON(commune, { style: { color: '#333', weight: 2, fill: false } });
+  const prioritesLayer = L.geoJSON(priorites, {
+    style: { color: '#000', weight: 2, fillColor: '#c0392b', fillOpacity: 0.25 },
+    onEachFeature: (feature, layer) => {
+      const p = feature.properties;
+      layer.bindPopup(`
+        <div class="popup-title">Zone prioritaire #${p.id} - ${p.classe_risque}</div>
+        Surface : ${(p.surface_m2 / 10000).toFixed(2)} ha<br>
+        Score de priorite : ${p.score_priorite}<br>
+        Enjeu le plus proche : ${p.enjeu_proche || 'n/a'} (${p.distance_enjeu_m ? p.distance_enjeu_m.toFixed(0) + ' m' : 'n/a'})
+        <div class="popup-action"><b>Action recommandee :</b><br>${p.action_recommandee}</div>
+      `);
+    },
+  });
+
+  // Chaque couche raster (risque, NDVI, NDMI, FWI, pente, exposition,
+  // combustible, enjeux) devient une entree de calque togglable.
+  const overlays = {};
+  for (const spec of layerDefs) {
+    const layer = L.imageOverlay(`/api/layers/${spec.id}.png`, imageBounds, { opacity: 0.7 });
+    overlays[`${spec.label} <span style="color:#888">(${spec.unit})</span>`] = layer;
+    if (spec.default_on) layer.addTo(map);
+  }
+  overlays['Contour communal'] = communeLayer.addTo(map);
+  overlays['Zones prioritaires retardant'] = prioritesLayer.addTo(map);
+
+  map.fitBounds(communeLayer.getBounds());
+  L.control.layers(null, overlays, { collapsed: false, position: 'topright' }).addTo(map);
+
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = () => {
+    const div = L.DomUtil.create('div', 'legend');
+    let html = '<b>Risque incendie</b><br>';
+    for (const cls of [4, 3, 2, 1]) {
+      html += `<span class="swatch" style="background:${RISK_COLORS[cls]}"></span>${RISK_LABELS[cls]}<br>`;
+    }
+    html += '<br><span class="prio-swatch"></span>Zone prioritaire retardant';
+    div.innerHTML = html;
+    return div;
+  };
+  legend.addTo(map);
+
+  document.getElementById('freshness').innerHTML = `
+    <b>Instantane statique</b> - pas de mise a jour temps reel.<br>
+    Imagerie Sentinel-2 : ${metadata.sentinel2_mosaic}<br>
+    Meteo (FWI) : ${metadata.fwi_date} (station ${metadata.fwi_station})<br>
+    Relief/vegetation/enjeux : telecharges le 2026-08-01
+  `;
+}
+
+init().catch(err => {
+  document.getElementById('map').innerHTML =
+    '<p style="padding:20px;color:red">Erreur de chargement des donnees : ' + err.message + '</p>';
+  console.error(err);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+venv/
+.env
+.env.example
+__pycache__/
+*.pyc
+data/raw/
+outputs/
+.git/
+.claude/
+scripts/

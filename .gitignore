@@ -1,0 +1,11 @@
+venv/
+.env
+__pycache__/
+*.pyc
+*.egg-info/
+data/raw/
+outputs/
+.ipynb_checkpoints/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+FIREMAP_prompt_et_methodologie_finale.md.pdf

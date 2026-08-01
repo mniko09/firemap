@@ -1,0 +1,13 @@
+sentinelhub
+rasterio
+geopandas
+numpy
+shapely
+pyproj
+folium
+fastapi
+uvicorn
+python-dotenv
+requests
+matplotlib
+scipy
