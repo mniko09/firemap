@@ -9,3 +9,20 @@ outputs/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 FIREMAP_prompt_et_methodologie_finale.md.pdf
+
+# venv v2
+.venv/
+
+# registre v2 (SQLite + fichiers WAL)
+data/firemap.sqlite
+data/firemap.sqlite-wal
+data/firemap.sqlite-shm
+
+# sorties generees par commune (v2)
+data/communes/
+
+# donnees generees mono-commune (legacy Phase 0) - regenerables via le pipeline
+data/processed/
+data/boundaries/
+# copie de reference locale des sorties v1 (Le Muy)
+data/_v1_lemuy_ref/

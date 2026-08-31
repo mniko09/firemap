@@ -13,12 +13,18 @@ from firemap.grid import build_reference_grid, rasterize_commune_mask
 from firemap.ingestion.commune import load_or_fetch_commune
 from firemap.ingestion.sentinel2 import fetch_ndvi_ndmi
 
-# Fenetres temporelles candidates (recent -> plus large), pour trouver une
-# mosaique la moins nuageuse possible. Aujourd'hui : 2026-07-31.
+import datetime as _dt
+
+# Fenetres temporelles candidates, de la plus recente/etroite a la plus large.
+# On garde toujours la meme borne de FIN (= aujourd'hui) et on recule seulement
+# la borne de DEBUT : c'est la logique "derniere donnee disponible" du cahier v2
+# (au lieu des dates figees de juillet 2026 du prototype v1). Sentinel-2 repasse
+# tous les 3-5 j, donc 30 j de recul donnent deja ~6-10 passages a mosaiquer.
+_TODAY = _dt.date.today()
+_WINDOW_LOOKBACKS_DAYS = [30, 60, 120]
 TIME_WINDOWS = [
-    ("2026-07-01", "2026-07-30"),
-    ("2026-06-01", "2026-07-30"),
-    ("2026-05-01", "2026-07-30"),
+    ((_TODAY - _dt.timedelta(days=n)).isoformat(), _TODAY.isoformat())
+    for n in _WINDOW_LOOKBACKS_DAYS
 ]
 
 COVERAGE_TARGET = 90.0  # % de pixels valides (sans nuage) vises sur la commune

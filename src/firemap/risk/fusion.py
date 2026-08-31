@@ -25,8 +25,13 @@ FWI_ABSOLUTE_MAX = 50.0
 RISK_LABELS = {1: "Faible", 2: "Modere", 3: "Eleve", 4: "Tres eleve"}
 
 
-def read_layer(name: str) -> np.ndarray:
-    with rasterio.open(config.PROCESSED_DIR / name) as src:
+def read_layer(name: str, processed_dir=None) -> np.ndarray:
+    """Lit un raster derive (ndvi.tif, fwi.tif, ...).
+    processed_dir : dossier ou chercher (v2 : ctx.processed_dir) ;
+    None -> config.PROCESSED_DIR (legacy, scripts Phase 0).
+    """
+    base = processed_dir if processed_dir is not None else config.PROCESSED_DIR
+    with rasterio.open(base / name) as src:
         return src.read(1).astype("float32")
 
 
@@ -50,14 +55,16 @@ def exposition_score(aspect_deg: np.ndarray) -> np.ndarray:
     return score
 
 
-def compute_risk(commune_mask: np.ndarray) -> Dict[str, np.ndarray]:
-    """Calcule les couches normalisees et le risque fusionne (0-1) sur la grille gabarit."""
-    ndvi = read_layer("ndvi.tif")
-    ndmi = read_layer("ndmi.tif")
-    fwi = read_layer("fwi.tif")
-    slope = read_layer("slope.tif")
-    aspect = read_layer("aspect.tif")
-    fuel_weight = read_layer("fuel.tif")
+def compute_risk(commune_mask: np.ndarray, processed_dir=None) -> Dict[str, np.ndarray]:
+    """Calcule les couches normalisees et le risque fusionne (0-1) sur la grille gabarit.
+    processed_dir : ou lire les .tif sources (v2 : ctx.processed_dir) ; None -> legacy.
+    """
+    ndvi = read_layer("ndvi.tif", processed_dir)
+    ndmi = read_layer("ndmi.tif", processed_dir)
+    fwi = read_layer("fwi.tif", processed_dir)
+    slope = read_layer("slope.tif", processed_dir)
+    aspect = read_layer("aspect.tif", processed_dir)
+    fuel_weight = read_layer("fuel.tif", processed_dir)
 
     cloud_mask = ~np.isnan(ndvi) & ~np.isnan(ndmi)
     valid_mask = commune_mask & cloud_mask

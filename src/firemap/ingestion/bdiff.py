@@ -53,7 +53,12 @@ COLUMN_MAP = [
 
 
 def load_bdiff_csv(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, sep=";", skiprows=3, encoding="cp1252")
+    # Le portail BDIFF exporte desormais en UTF-8 (sans BOM) ; d'anciens exports
+    # etaient en cp1252. On tente l'UTF-8, repli cp1252.
+    try:
+        df = pd.read_csv(path, sep=";", skiprows=3, encoding="utf-8")
+    except UnicodeDecodeError:
+        df = pd.read_csv(path, sep=";", skiprows=3, encoding="cp1252")
     df.columns = COLUMN_MAP
     df["code_insee"] = df["code_insee"].astype(str)
     df["date_alerte"] = pd.to_datetime(df["date_alerte"], format="%Y-%m-%d %H:%M:%S", errors="coerce")

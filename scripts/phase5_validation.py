@@ -112,6 +112,22 @@ def main():
             "pct_classe_elevee_tres_elevee": round(pct_high, 1),
         })
 
+    # Garde : certaines communes (peu de feux, ou feux sans "type de peuplement"
+    # renseigne dans BDIFF) ne fournissent aucune ligne exploitable. On l'affiche
+    # proprement au lieu de laisser planter le DataFrame vide.
+    if not results:
+        print("\n--- Validation BDIFF non concluante pour cette commune ---")
+        print("Aucun incendie historique exploitable pour la comparaison vegetation :")
+        print("trop peu de feux recenses et/ou champ 'type de peuplement' non renseigne")
+        print("(typiquement des departs de faible surface hors foret).")
+        print(f"Rappel : {len(le_muy)} incendie(s) sur la commune, "
+              f"{le_muy['surface_ha'].sum():.3f} ha au total sur la periode.")
+        print("\n=== Resultat ===")
+        print("Validation indirecte impossible faute d'historique exploitable ; cela "
+              "traduit surtout une faible activite de feux de vegetation recensee sur "
+              "la commune (a mentionner comme tel, ce n'est pas une erreur de la carte).")
+        return
+
     table = pd.DataFrame(results).sort_values("nb_incendies_le_muy", ascending=False)
     print("\n--- Tableau de validation : type de vegetation touche par les feux ---")
     print("--- vs % de ce type classe Eleve/Tres eleve dans notre carte de risque ---")

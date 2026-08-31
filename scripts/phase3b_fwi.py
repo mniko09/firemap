@@ -27,11 +27,23 @@ def main():
     grid = build_reference_grid(gdf_l93)
     commune_mask = rasterize_commune_mask(gdf_l93, grid).astype(bool)
 
-    station = find_nearest_station(centroid.y, centroid.x, departement="83")
+    # Departement derive du code INSEE (config.DEPARTEMENT) au lieu de "83" en dur :
+    # find_nearest_station ne cherche que parmi les stations de ce departement.
+    station = find_nearest_station(centroid.y, centroid.x, departement=config.DEPARTEMENT)
     print(f"Station Meteo-France retenue : {station['nom']} (id {station['id']}), "
           f"a {station['alt']} m d'altitude")
 
-    weather = fetch_daily_weather(station["id"], "2026-05-01T00:00:00Z", "2026-07-31T00:00:00Z")
+    # Fenetre glissante (comme Sentinel-2) : fin = aujourd'hui, debut = -120 j.
+    # ~120 j couvrent largement le spin-up du systeme canadien Foret-Meteo tout en
+    # donnant un FWI representatif des conditions actuelles ; le script retient de
+    # toute facon la derniere journee disponible (fwi_series.dropna().iloc[-1]).
+    import datetime as _dt
+    _today = _dt.date.today()
+    weather = fetch_daily_weather(
+        station["id"],
+        (_today - _dt.timedelta(days=120)).isoformat() + "T00:00:00Z",
+        _today.isoformat() + "T00:00:00Z",
+    )
     print(f"{len(weather)} jours de donnees recuperes ({weather['DATE'].min().date()} "
           f"-> {weather['DATE'].max().date()})")
 
