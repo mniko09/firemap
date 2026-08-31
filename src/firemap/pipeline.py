@@ -16,12 +16,15 @@ le rendu visuel (PNG/tuiles) sera fait proprement en Phase 2 v2.
 import datetime as dt
 import json
 import traceback
+import warnings
 
 import geopandas as gpd
 import numpy as np
 import rasterio
 from rasterio import features
 from rasterio.transform import array_bounds
+from rio_cogeo.cogeo import cog_translate
+from rio_cogeo.profiles import cog_profiles
 from scipy.ndimage import distance_transform_edt
 
 from . import config, registry
@@ -35,6 +38,12 @@ from .ingestion.mnt import compute_slope_aspect, fetch_elevation
 from .ingestion.sentinel2 import fetch_ndvi_ndmi
 from .risk.fusion import classify_risk, compute_risk, read_layer
 from .risk.priorisation import compute_priorite, extract_priority_zones
+from .storage import LAYERS as _LAYER_SPECS
+
+
+def cog_name(tif_name: str) -> str:
+    """ndvi.tif -> ndvi.cog.tif (convention des Cloud-Optimized GeoTIFF)."""
+    return tif_name[:-4] + ".cog.tif" if tif_name.endswith(".tif") else tif_name + ".cog.tif"
 
 # --- Reglages fenetres temporelles ("derniere donnee disponible", cf. cahier) ---
 _S2_COVERAGE_TARGET = 90.0            # % de pixels sans nuage vise avant d'arreter d'elargir
@@ -253,6 +262,54 @@ def _step_risk(ctx, grid, mask, pts_l93, force):
     _log(ctx, f"quantiles Q1/Q2/Q3 = {q1:.3f}/{q2:.3f}/{q3:.3f} ; {len(zones)} zones prioritaires")
 
 
+def _step_cog(ctx, force):
+    """Convertit chaque couche affichable en Cloud-Optimized GeoTIFF web-optimise
+    (reprojection Web Mercator + tuilage interne aligne sur la grille XYZ), lu
+    ensuite par la route de tuiles (rio-tiler).
+
+    Les couches sont d'abord DETOUREES sur le contour communal (le gabarit) :
+    pente/exposition/combustible/FWI/NDVI/NDMI sont calculees sur tout le
+    rectangle englobant, il ne faut pas qu'elles debordent du contour sur la carte.
+    """
+    profile = cog_profiles.get("deflate")  # sans perte : adapte aux valeurs continues
+    with rasterio.open(ctx.processed("gabarit.tif")) as g:
+        commune = g.read(1).astype(bool)  # 1 = pixel dans la commune
+
+    faits = []
+    for spec in _LAYER_SPECS:
+        src_p = ctx.processed(spec.filename)
+        dst_p = ctx.processed(cog_name(spec.filename))
+        if not src_p.exists() or (not force and dst_p.exists()):
+            continue
+
+        with rasterio.open(src_p) as src:
+            data = src.read(1)
+            meta = src.meta.copy()
+
+        if spec.categorical:                       # risk_classes : 0 = hors commune
+            data = np.where(commune, data, 0).astype(meta["dtype"])
+            meta["nodata"] = 0
+        else:                                      # continu : hors commune -> nodata (nan)
+            data = np.where(commune, data, np.nan).astype("float32")
+            meta.update(dtype="float32", nodata=float("nan"))
+
+        # plus proche voisin partout : pas de melange de classes, pas de halo de
+        # nan en bord de commune (a 10 m natif, l'ecart visuel est negligeable).
+        with rasterio.io.MemoryFile() as mem:
+            with mem.open(**meta) as tmp:
+                tmp.write(data, 1)
+            with mem.open() as tmp_r, warnings.catch_warnings():
+                # rio-cogeo emet un RuntimeWarning benin en castant le nodata nan
+                warnings.simplefilter("ignore", RuntimeWarning)
+                cog_translate(tmp_r, dst_p, profile, web_optimized=True, quiet=True,
+                              in_memory=False, resampling="nearest",
+                              overview_resampling="nearest")
+        faits.append(spec.id)
+
+    if faits:
+        _log(ctx, f"COG : {len(faits)} couche(s) -> {', '.join(faits)}")
+
+
 # ===========================================================================
 # Point d'entree
 # ===========================================================================
@@ -282,6 +339,7 @@ def run(insee: str, *, nom: str | None = None, force: bool = False) -> registry.
         etape = "enjeux";      pts_l93 = _step_enjeux(ctx, grid, force)
         etape = "fwi";         fwi_date = _step_fwi(ctx, grid, gdf, force)
         etape = "risque";      _step_risk(ctx, grid, mask, pts_l93, force)
+        etape = "cog";         _step_cog(ctx, force)
 
         etape = "metadata"
         _merge_metadata(

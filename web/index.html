@@ -3,126 +3,403 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIREMAP - Le Muy</title>
+<title>FIREMAP - Risque incendie communal</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  html, body { margin: 0; height: 100%; font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-  #map { height: 100%; width: 100%; }
-  #title {
-    position: absolute; top: 12px; left: 50px; z-index: 1000;
-    background: white; padding: 8px 14px; border-radius: 6px;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.3); font-size: 16px; font-weight: 600; max-width: 340px;
+  html, body { margin: 0; height: 100%; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  #map { position: absolute; inset: 0; }
+
+  /* --- Barre de recherche (haut) --- */
+  #searchbar {
+    position: absolute; top: 12px; left: 50px; z-index: 1200; width: 320px;
+    background: #fff; border-radius: 8px; box-shadow: 0 1px 8px rgba(0,0,0,.3);
   }
-  #title span { display: block; font-size: 12px; font-weight: 400; color: #555; margin-top: 2px; }
+  #searchbar .brand { font-size: 12px; font-weight: 700; color: #c0392b; padding: 6px 12px 0; }
+  #q {
+    width: 100%; box-sizing: border-box; border: 0; outline: 0; padding: 6px 12px 10px;
+    font-size: 15px; background: transparent;
+  }
+  #results { list-style: none; margin: 0; padding: 0; border-top: 1px solid #eee; max-height: 260px; overflow-y: auto; }
+  #results li { padding: 8px 12px; cursor: pointer; font-size: 14px; }
+  #results li:hover { background: #f3f6f9; }
+  #results li .meta { color: #888; font-size: 12px; }
+  #results:empty { display: none; }
+
+  /* --- Toast d'etat (centre) --- */
+  #status {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 1300;
+    background: #fff; padding: 16px 22px; border-radius: 10px; box-shadow: 0 2px 16px rgba(0,0,0,.35);
+    font-size: 14px; max-width: 360px; display: none;
+  }
+  #status.error { border-left: 4px solid #c0392b; }
+  #status .spin {
+    display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px;
+    border: 2px solid #ccc; border-top-color: #c0392b; border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* --- Bandeau de fraicheur / avertissement (bas gauche) --- */
   #freshness {
-    position: absolute; bottom: 12px; left: 12px; z-index: 1000;
-    background: rgba(255,255,255,0.92); padding: 8px 12px; border-radius: 6px;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.3); font-size: 11px; color: #444; max-width: 320px; line-height: 1.5;
+    position: absolute; bottom: 12px; left: 12px; z-index: 1000; max-width: 340px;
+    background: rgba(255,255,255,.93); padding: 9px 12px; border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.3); font-size: 11px; color: #444; line-height: 1.55;
   }
-  #freshness b { color: #c0392b; }
-  .legend {
-    background: white; padding: 10px 12px; border-radius: 6px;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.3); line-height: 1.6; font-size: 13px;
-  }
-  .legend .swatch {
-    display: inline-block; width: 14px; height: 14px; margin-right: 6px;
-    border-radius: 3px; vertical-align: middle;
-  }
-  .legend .prio-swatch {
-    display: inline-block; width: 14px; height: 10px; margin-right: 6px;
-    border: 2px solid black; vertical-align: middle;
-  }
+  #freshness .warn { color: #b9430f; font-weight: 600; }
+
+  #legend-box { padding: 8px 12px; line-height: 1.7; }
+  #legend-box .sw { display: inline-block; width: 14px; height: 14px; margin-right: 6px; border-radius: 3px; vertical-align: middle; }
+  #legend-box .prio { display: inline-block; width: 14px; height: 10px; margin-right: 6px; border: 2px solid #000; vertical-align: middle; }
   .popup-title { font-weight: 600; margin-bottom: 4px; }
   .popup-action { margin-top: 6px; padding: 6px 8px; background: #fdf3e7; border-left: 3px solid #e67e22; }
-  .leaflet-control-layers { font-size: 13px; max-height: 80vh; overflow-y: auto; }
+  .leaflet-control-layers { font-size: 13px; max-height: 78vh; overflow-y: auto; }
+
+  /* --- Panneau couches + valeur (haut droite) --- */
+  #panel {
+    position: absolute; top: 12px; right: 12px; z-index: 1000; width: 272px;
+    max-height: calc(100vh - 90px); overflow-y: auto;
+    background: #fff; border-radius: 8px; box-shadow: 0 1px 8px rgba(0,0,0,.3); font-size: 13px;
+  }
+  #panel h4 { margin: 0; padding: 8px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+              color: #666; background: #f6f7f9; border-bottom: 1px solid #eee; }
+  #panel .sec { border-bottom: 1px solid #eee; }
+  .lrow { padding: 6px 12px; }
+  .lrow label { display: block; cursor: pointer; }
+  .lrow .unit { color: #999; font-size: 11px; }
+  .lrow input[type=range] { width: 100%; margin: 4px 0 0; accent-color: #c0392b; }
+  .lrow.vrow input[type=range] { display: none; }
+  #value-box { padding: 8px 12px; }
+  #value-box .hint { color: #999; }
+  #value-box .coords { font-family: ui-monospace, monospace; font-size: 11px; color: #555; margin-bottom: 6px; }
+  #value-box table { width: 100%; border-collapse: collapse; }
+  #value-box td { padding: 3px 0; border-bottom: 1px dotted #e5e5e5; }
+  #value-box td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
+  #value-box .sw { display: inline-block; width: 11px; height: 11px; margin-right: 4px; border-radius: 2px; vertical-align: middle; }
 </style>
 </head>
 <body>
-<div id="title">
-  FIREMAP - Risque incendie
-  <span>Commune du Muy (Var) - prototype SELVERT</span>
+<div id="searchbar">
+  <div class="brand">FIREMAP &middot; risque incendie communal</div>
+  <input id="q" type="text" placeholder="Rechercher une commune..." autocomplete="off" />
+  <ul id="results"></ul>
 </div>
-<div id="freshness">Chargement des metadonnees...</div>
+<div id="status"></div>
+<div id="freshness">Chargement...</div>
+<div id="panel">
+  <div class="sec"><h4>Couches</h4><div id="layers-list"></div></div>
+  <div class="sec"><h4>Valeur au point</h4><div id="value-box"><span class="hint">Cliquez sur la carte pour lire chaque couche ici.</span></div></div>
+  <div class="sec"><h4>Légende</h4><div id="legend-box"></div></div>
+</div>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const RISK_LABELS = {1: "Faible", 2: "Modéré", 3: "Élevé", 4: "Très élevé"};
-const RISK_COLORS = {1: "#2ca02c", 2: "#f1c40f", 3: "#e67e22", 4: "#c0392b"};
+"use strict";
 
-const map = L.map('map');
+const RISK_LABELS = { 1: "Faible", 2: "Modéré", 3: "Élevé", 4: "Très élevé" };
+const RISK_COLORS = { 1: "#2ca02c", 2: "#f1c40f", 3: "#e67e22", 4: "#c0392b" };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors',
-  maxZoom: 19,
-}).addTo(map);
+// Etat courant (commune affichee, specs de ses couches, marqueur du dernier clic)
+let currentInsee = null, layerSpecs = [], clickMarker = null;
 
-async function init() {
-  const [layerDefs, bounds, commune, priorites, metadata] = await Promise.all([
-    fetch('/api/layers').then(r => r.json()),
-    fetch('/api/bounds').then(r => r.json()),
-    fetch('/api/commune').then(r => r.json()),
-    fetch('/api/priorites').then(r => r.json()),
-    fetch('/api/metadata').then(r => r.json()),
-  ]);
+// Mise en forme de la valeur brute de chaque couche (unites lisibles)
+const CARD = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const VALUE_FMT = {
+  risk_classes:    (v) => v == null ? "—" : `<span class="sw" style="background:${RISK_COLORS[v]}"></span>${RISK_LABELS[v] || v}`,
+  risk:            (v) => v == null ? "—" : v.toFixed(3),
+  secheresse_ndmi: (v) => v == null ? "—" : v.toFixed(2),
+  vigueur_ndvi:    (v) => v == null ? "—" : v.toFixed(2),
+  fwi:             (v) => v == null ? "—" : v.toFixed(1),
+  pente:           (v) => v == null ? "—" : v.toFixed(1) + " °",
+  exposition:      (v) => v == null ? "—" : Math.round(v) + " ° (" + CARD[Math.round((v % 360) / 45) % 8] + ")",
+  combustible:     (v) => v == null ? "—" : v.toFixed(2),
+  enjeux:          (v) => v == null ? "—" : Math.round(v) + " m",
+};
 
-  const imageBounds = [[bounds.south, bounds.west], [bounds.north, bounds.east]];
+// ---------------------------------------------------------------------------
+// Carte + fonds IGN Geoplateforme (data.geopf.fr, gratuits, sans cle - cf. §4.3bis)
+// ---------------------------------------------------------------------------
+// fadeAnimation:false -> les tuiles passent directement a l'opacite finale.
+// (Le fondu de Leaflet s'appuie sur requestAnimationFrame ; si la page est
+//  momentanement masquee, rAF est suspendu et les tuiles restent invisibles.)
+const map = L.map("map", { zoomControl: true, fadeAnimation: false }).setView([43.7, 6.2], 9);
 
-  const communeLayer = L.geoJSON(commune, { style: { color: '#333', weight: 2, fill: false } });
-  const prioritesLayer = L.geoJSON(priorites, {
-    style: { color: '#000', weight: 2, fillColor: '#c0392b', fillOpacity: 0.25 },
-    onEachFeature: (feature, layer) => {
-      const p = feature.properties;
-      layer.bindPopup(`
-        <div class="popup-title">Zone prioritaire #${p.id} - ${p.classe_risque}</div>
-        Surface : ${(p.surface_m2 / 10000).toFixed(2)} ha<br>
-        Score de priorite : ${p.score_priorite}<br>
-        Enjeu le plus proche : ${p.enjeu_proche || 'n/a'} (${p.distance_enjeu_m ? p.distance_enjeu_m.toFixed(0) + ' m' : 'n/a'})
-        <div class="popup-action"><b>Action recommandee :</b><br>${p.action_recommandee}</div>
-      `);
-    },
-  });
+function geopf(layer, format) {
+  return L.tileLayer(
+    "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
+    "&LAYER=" + layer + "&STYLE=normal&FORMAT=" + format +
+    "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
+    { attribution: "IGN-F / Géoplateforme", maxZoom: 19 }
+  );
+}
+const basePlanIGN = geopf("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png");
+const baseOrtho   = geopf("HR.ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg");
+const baseOSM     = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                                { attribution: "&copy; OpenStreetMap", maxZoom: 19 });
+const overlayCadastre = geopf("CADASTRALPARCELS.PARCELLAIRE_EXPRESS", "image/png");
+overlayCadastre.setOpacity(0.5);   // fond de tuile non transparent -> opacite reduite
 
-  // Chaque couche raster (risque, NDVI, NDMI, FWI, pente, exposition,
-  // combustible, enjeux) devient une entree de calque togglable.
-  const overlays = {};
-  for (const spec of layerDefs) {
-    const layer = L.imageOverlay(`/api/layers/${spec.id}.png`, imageBounds, { opacity: 0.7 });
-    overlays[`${spec.label} <span style="color:#888">(${spec.unit})</span>`] = layer;
-    if (spec.default_on) layer.addTo(map);
+basePlanIGN.addTo(map);
+const baseControl = L.control.layers(
+  { "Plan IGN v2": basePlanIGN, "Photo aérienne": baseOrtho, "OpenStreetMap": baseOSM },
+  { "Parcelles cadastrales": overlayCadastre },
+  { position: "topleft", collapsed: true }
+).addTo(map);
+
+// Clic sur la carte -> valeur de chaque couche au point (objectif 3.4).
+// Enregistre une seule fois ; le handler ne fait rien tant qu'aucune commune n'est chargee.
+map.on("click", onMapClick);
+
+// ---------------------------------------------------------------------------
+// Recherche de commune (nom -> INSEE), avec anti-rebond
+// ---------------------------------------------------------------------------
+const $q = document.getElementById("q");
+const $results = document.getElementById("results");
+let searchTimer = null;
+
+$q.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  const q = $q.value.trim();
+  if (q.length < 2) { $results.innerHTML = ""; return; }
+  searchTimer = setTimeout(() => runSearch(q), 250);
+});
+document.addEventListener("click", (e) => {         // fermer la liste au clic exterieur
+  if (!document.getElementById("searchbar").contains(e.target)) $results.innerHTML = "";
+});
+
+async function runSearch(q) {
+  let items;
+  try {
+    items = await fetch("/api/communes/search?q=" + encodeURIComponent(q)).then((r) => r.json());
+  } catch (e) { return; }
+  $results.innerHTML = "";
+  for (const c of items) {
+    const li = document.createElement("li");
+    li.innerHTML = `${c.nom} <span class="meta">— ${c.code_departement || "?"}` +
+                   (c.population ? ` · ${c.population.toLocaleString("fr")} hab.` : "") + `</span>`;
+    li.onclick = () => {
+      $q.value = c.nom;
+      $results.innerHTML = "";
+      selectCommune(c.insee, c.nom);
+    };
+    $results.appendChild(li);
   }
-  overlays['Contour communal'] = communeLayer.addTo(map);
-  overlays['Zones prioritaires retardant'] = prioritesLayer.addTo(map);
-
-  map.fitBounds(communeLayer.getBounds());
-  L.control.layers(null, overlays, { collapsed: false, position: 'topright' }).addTo(map);
-
-  const legend = L.control({ position: 'bottomright' });
-  legend.onAdd = () => {
-    const div = L.DomUtil.create('div', 'legend');
-    let html = '<b>Risque incendie</b><br>';
-    for (const cls of [4, 3, 2, 1]) {
-      html += `<span class="swatch" style="background:${RISK_COLORS[cls]}"></span>${RISK_LABELS[cls]}<br>`;
-    }
-    html += '<br><span class="prio-swatch"></span>Zone prioritaire retardant';
-    div.innerHTML = html;
-    return div;
-  };
-  legend.addTo(map);
-
-  document.getElementById('freshness').innerHTML = `
-    <b>Instantane statique</b> - pas de mise a jour temps reel.<br>
-    Imagerie Sentinel-2 : ${metadata.sentinel2_mosaic}<br>
-    Meteo (FWI) : ${metadata.fwi_date} (station ${metadata.fwi_station})<br>
-    Relief/vegetation/enjeux : telecharges le 2026-08-01
-  `;
 }
 
-init().catch(err => {
-  document.getElementById('map').innerHTML =
-    '<p style="padding:20px;color:red">Erreur de chargement des donnees : ' + err.message + '</p>';
-  console.error(err);
-});
+// ---------------------------------------------------------------------------
+// Machine a etats : absent -> generate -> polling -> load
+// ---------------------------------------------------------------------------
+const $status = document.getElementById("status");
+function setStatus(html, isError) {
+  $status.className = isError ? "error" : "";
+  $status.innerHTML = (isError ? "" : '<span class="spin"></span>') + html;
+  $status.style.display = "block";
+}
+function clearStatus() { $status.style.display = "none"; }
+
+async function selectCommune(insee, nom) {
+  history.replaceState(null, "", "?insee=" + insee);
+  setStatus("Vérification du cache…");
+  let s;
+  try {
+    s = await fetch(`/api/communes/${insee}/status`).then((r) => r.json());
+  } catch (e) { setStatus("API injoignable : " + e.message, true); return; }
+
+  if (s.statut === "absent" || s.statut === "error") {
+    setStatus("Première génération de <b>" + nom + "</b>…<br><small>téléchargements Sentinel-2 / IGN / Météo-France, ~2 min</small>");
+    await fetch(`/api/communes/${insee}/generate?nom=` + encodeURIComponent(nom), { method: "POST" });
+    s = await pollUntilReady(insee);
+  } else if (s.statut === "queued" || s.statut === "running") {
+    setStatus("Génération en cours…");
+    s = await pollUntilReady(insee);
+  }
+
+  if (s.statut === "error") { setStatus("Échec de la génération :<br><small>" + (s.erreur || "").split("\n")[0] + "</small>", true); return; }
+  clearStatus();
+  await loadCommune(insee, nom);
+}
+
+async function pollUntilReady(insee) {
+  for (;;) {
+    await sleep(3000);
+    const s = await fetch(`/api/communes/${insee}/status`).then((r) => r.json());
+    if (s.pret || s.statut === "error") return s;
+    setStatus("Génération en cours… <small>(" + s.statut + ")</small>");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chargement d'une commune : couches raster (tuiles COG) + vecteurs
+// ---------------------------------------------------------------------------
+let rasterLayers = {};       // id -> L.tileLayer
+let vectorLayers = {};       // commune / priorites
+
+function fitWhenSized(bounds, tries = 0) {
+  map.invalidateSize();
+  const s = map.getSize();
+  if (s.x > 20 && s.y > 20) {
+    map.fitBounds(bounds, { maxZoom: 16, animate: false });
+    // Si le conteneur faisait 0 px a l'init, la position interne du map-pane
+    // peut etre decalee (translate3d parasite -> tuiles chargees mais hors
+    // ecran). On la re-etablit proprement une fois la taille connue.
+    map._resetView(map.getCenter(), map.getZoom());
+  } else if (tries < 60) {                      // ~1 s max d'attente
+    requestAnimationFrame(() => fitWhenSized(bounds, tries + 1));
+  }
+}
+
+function clearCurrent() {
+  for (const l of Object.values(rasterLayers)) map.removeLayer(l);
+  for (const l of Object.values(vectorLayers)) map.removeLayer(l);
+  if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
+  document.getElementById("layers-list").innerHTML = "";
+  document.getElementById("value-box").innerHTML =
+    '<span class="hint">Cliquez sur la carte pour lire chaque couche ici.</span>';
+  rasterLayers = {}; vectorLayers = {};
+}
+
+async function loadCommune(insee, nom) {
+  clearCurrent();
+  currentInsee = insee;
+
+  const [layers, bounds, commune, priorites, meta] = await Promise.all([
+    fetch(`/api/communes/${insee}/layers`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/bounds`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/commune`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/priorites`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/metadata`).then((r) => r.json()),
+  ]);
+  const llBounds = L.latLngBounds([bounds.south, bounds.west], [bounds.north, bounds.east]);
+
+  // -- vecteurs --
+  vectorLayers.commune = L.geoJSON(commune, { style: { color: "#111", weight: 2, fill: false } }).addTo(map);
+  vectorLayers.priorites = L.geoJSON(priorites, {
+    style: { color: "#000", weight: 2, fillColor: "#c0392b", fillOpacity: 0.25 },
+    onEachFeature: (f, layer) => {
+      const p = f.properties;
+      layer.bindPopup(
+        `<div class="popup-title">Zone prioritaire #${p.id} — ${p.classe_risque}</div>` +
+        `Surface : ${(p.surface_m2 / 10000).toFixed(2)} ha<br>` +
+        `Score de priorité : ${p.score_priorite}<br>` +
+        `Enjeu le plus proche : ${p.enjeu_proche || p.categorie_enjeu || "n/a"}` +
+        (p.distance_enjeu_m != null ? ` (${p.distance_enjeu_m.toFixed(0)} m)` : "") +
+        `<div class="popup-action"><b>Action :</b><br>${p.action_recommandee}</div>`
+      );
+    },
+  }).addTo(map);
+
+  // -- couches raster = tuiles COG servies par /api/communes/{insee}/layers/{id}/{z}/{x}/{y}.png --
+  layerSpecs = layers;
+  for (const spec of layers) {
+    rasterLayers[spec.id] = L.tileLayer(`/api/communes/${insee}/layers/${spec.id}/{z}/{x}/{y}.png`, {
+      opacity: 0.7, bounds: llBounds, minZoom: 9, maxNativeZoom: 18, maxZoom: 19,
+    });
+    if (spec.default_on) rasterLayers[spec.id].addTo(map);
+  }
+  buildPanel(layers);
+
+  // Cadrage : au 1er chargement, le conteneur peut ne pas avoir sa taille finale
+  // quand ce code s'execute (Leaflet mesurerait 0 px -> fitBounds retombe au
+  // zoom 0). On attend, image par image, que le conteneur soit reellement
+  // dimensionne avant de re-mesurer (invalidateSize) et cadrer.
+  fitWhenSized(llBounds);
+  updateFreshness(meta, nom, insee);
+}
+
+function fillLegend() {
+  let html = "";
+  for (const c of [4, 3, 2, 1]) html += `<span class="sw" style="background:${RISK_COLORS[c]}"></span>${RISK_LABELS[c]}<br>`;
+  html += `<br><span class="prio"></span>Zone prioritaire retardant`;
+  document.getElementById("legend-box").innerHTML = html;
+}
+fillLegend();
+
+function updateFreshness(meta, nom, insee) {
+  document.getElementById("freshness").innerHTML =
+    `<b>${nom}</b> (INSEE ${insee})<br>` +
+    `Sentinel-2 : <b>${meta.sentinel2_asof || "?"}</b> &nbsp;·&nbsp; ` +
+    `FWI : <b>${meta.fwi_date || "?"}</b>` + (meta.fwi_station ? ` (station ${meta.fwi_station})` : "") + `<br>` +
+    `Relief / végétation / enjeux : ${meta.sources_fetched || "?"}<br>` +
+    `<span class="warn">Aide à la décision — classement RELATIF du risque entre zones de la commune. ` +
+    `Ce n'est pas une prédiction ni une alerte incendie.</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Panneau : case on/off + curseur d'opacite par couche (objectif 3.5)
+// ---------------------------------------------------------------------------
+function buildPanel(layers) {
+  const list = document.getElementById("layers-list");
+  list.innerHTML = "";
+
+  for (const spec of layers) {
+    const tl = rasterLayers[spec.id];
+    const row = document.createElement("div");
+    row.className = "lrow";
+    row.innerHTML =
+      `<label><input type="checkbox" ${spec.default_on ? "checked" : ""}> ` +
+      `${spec.label} <span class="unit">${spec.unit || ""}</span></label>` +
+      `<input type="range" min="0" max="100" value="${Math.round((tl.options.opacity ?? 0.7) * 100)}">`;
+    const cb = row.querySelector('input[type=checkbox]');
+    const slider = row.querySelector('input[type=range]');
+    cb.onchange = () => (cb.checked ? tl.addTo(map) : map.removeLayer(tl));
+    slider.oninput = () => tl.setOpacity(slider.value / 100);   // marche meme si la couche est masquee
+    list.appendChild(row);
+  }
+
+  // vecteurs : simple on/off (pas d'opacite)
+  for (const [key, label] of [["commune", "Contour communal"], ["priorites", "Zones prioritaires retardant"]]) {
+    const vl = vectorLayers[key];
+    const row = document.createElement("div");
+    row.className = "lrow vrow";
+    row.innerHTML = `<label><input type="checkbox" checked> ${label}</label>`;
+    row.querySelector("input").onchange = (e) => (e.target.checked ? vl.addTo(map) : map.removeLayer(vl));
+    list.appendChild(row);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Clic -> valeur brute de chaque couche au point (objectif 3.4)
+// ---------------------------------------------------------------------------
+async function onMapClick(e) {
+  if (!currentInsee) return;
+  const { lat, lng } = e.latlng;
+
+  if (clickMarker) clickMarker.setLatLng(e.latlng);
+  else clickMarker = L.circleMarker(e.latlng, {
+    radius: 6, color: "#0066cc", weight: 2, fillColor: "#fff", fillOpacity: 1,
+  }).addTo(map);
+
+  const box = document.getElementById("value-box");
+  box.innerHTML = '<span class="hint">Lecture…</span>';
+  let data;
+  try {
+    data = await fetch(`/api/communes/${currentInsee}/value?lat=${lat}&lon=${lng}`).then((r) => r.json());
+  } catch (err) {
+    box.innerHTML = `<span class="hint">Erreur : ${err.message}</span>`;
+    return;
+  }
+  renderValue(data);
+}
+
+function renderValue(data) {
+  const box = document.getElementById("value-box");
+  if (!data.dans_commune) {
+    box.innerHTML = '<span class="hint">Point hors de la commune.</span>';
+    return;
+  }
+  let html = `<div class="coords">${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}</div><table>`;
+  for (const spec of layerSpecs) {
+    const fmt = VALUE_FMT[spec.id] || ((v) => (v == null ? "—" : String(v)));
+    html += `<tr><td>${spec.label}</td><td>${fmt(data.valeurs[spec.id])}</td></tr>`;
+  }
+  box.innerHTML = html + "</table>";
+}
+
+// ---------------------------------------------------------------------------
+// Demarrage : ?insee=... sinon Solliès-Pont (livrable SELVERT)
+// ---------------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+selectCommune(params.get("insee") || "83130", params.get("nom") || "Solliès-Pont");
 </script>
 </body>
 </html>

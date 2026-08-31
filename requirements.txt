@@ -1,13 +1,23 @@
+# Traitement geospatial
 sentinelhub
 rasterio
+rio-tiler
+rio-cogeo
 geopandas
 numpy
+pandas
 shapely
 pyproj
+scipy
+Pillow
+
+# Cartographie / rendu
 folium
+matplotlib
+
+# API
 fastapi
 uvicorn
 python-dotenv
 requests
-matplotlib
-scipy
+httpx

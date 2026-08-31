@@ -21,6 +21,7 @@ from ..grid import build_reference_grid, rasterize_commune_mask
 from ..ingestion.commune import load_or_fetch_commune
 from ..storage import LAYERS, compute_wgs84_bounds, export_layer_png
 from .routes_communes import router as communes_router
+from .routes_layers import router as layers_router
 
 LAYERS_DIR = config.OUTPUTS_DIR / "layers"
 BOUNDS_JSON = config.OUTPUTS_DIR / "layers_bounds.json"
@@ -64,6 +65,7 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 app.include_router(communes_router)
+app.include_router(layers_router)
 
 
 @app.get("/api/layers")

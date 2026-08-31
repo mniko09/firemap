@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "firemap-api",
-      "runtimeExecutable": "E:\\Firemap\\venv\\Scripts\\python.exe",
+      "runtimeExecutable": "E:\\FR Selvert\\firemap-v2\\.venv\\Scripts\\python.exe",
       "runtimeArgs": ["-m", "uvicorn", "firemap.api.main:app", "--host", "127.0.0.1", "--port", "8000"],
       "port": 8000
     }
