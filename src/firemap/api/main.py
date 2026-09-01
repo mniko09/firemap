@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .. import config, jobs, registry
+from .. import config, jobs, registry, scheduler
 from ..grid import build_reference_grid, rasterize_commune_mask
 from ..ingestion.commune import load_or_fetch_commune
 from ..storage import LAYERS, compute_wgs84_bounds, export_layer_png
@@ -57,7 +57,11 @@ async def lifespan(app: FastAPI):
         _prepare_layers()
     except Exception as exc:  # noqa: BLE001
         print(f"[startup] _prepare_layers ignore ({type(exc).__name__}: {exc})")
+
+    # v2 Phase 3 : planificateur de rafraichissement automatique
+    scheduler.start_scheduler()
     yield
+    scheduler.stop_scheduler()
 
 
 app = FastAPI(title="FIREMAP API", lifespan=lifespan)
@@ -66,6 +70,13 @@ app.add_middleware(
 )
 app.include_router(communes_router)
 app.include_router(layers_router)
+
+
+@app.get("/api/refresh/scan", tags=["refresh"])
+def trigger_refresh_scan():
+    """Declenche manuellement une passe de rafraichissement (sinon toutes les 12 h).
+    Utile pour tester, ou pour un cron externe le jour ou l'API est mise en veille."""
+    return scheduler.refresh_scan()
 
 
 @app.get("/api/layers")

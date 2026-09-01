@@ -21,3 +21,6 @@ uvicorn
 python-dotenv
 requests
 httpx
+
+# Planificateur (rafraichissement automatique)
+apscheduler

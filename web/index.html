@@ -74,6 +74,13 @@
   #value-box td { padding: 3px 0; border-bottom: 1px dotted #e5e5e5; }
   #value-box td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
   #value-box .sw { display: inline-block; width: 11px; height: 11px; margin-right: 4px; border-radius: 2px; vertical-align: middle; }
+
+  /* --- Badge "rafraichissement en cours" (non bloquant, haut centre) --- */
+  #refresh-badge {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1100;
+    display: none; background: #34495e; color: #fff; padding: 5px 12px; border-radius: 14px;
+    font-size: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.3);
+  }
 </style>
 </head>
 <body>
@@ -83,6 +90,7 @@
   <ul id="results"></ul>
 </div>
 <div id="status"></div>
+<div id="refresh-badge">↻ Rafraîchissement des données en cours…</div>
 <div id="freshness">Chargement...</div>
 <div id="panel">
   <div class="sec"><h4>Couches</h4><div id="layers-list"></div></div>
@@ -100,7 +108,13 @@ const RISK_COLORS = { 1: "#2ca02c", 2: "#f1c40f", 3: "#e67e22", 4: "#c0392b" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Etat courant (commune affichee, specs de ses couches, marqueur du dernier clic)
-let currentInsee = null, layerSpecs = [], clickMarker = null;
+let currentInsee = null, currentNom = "", layerSpecs = [], clickMarker = null;
+
+// Suivi du rafraichissement automatique (Phase 3)
+const POLL_MS = 60000;            // frequence d'interrogation de /status
+let statusTimer = null;           // handle du setInterval
+let lastGenereLe = null;          // horodatage de generation vu la derniere fois
+let tileV = "";                   // "cache-buster" ajoute a l'URL des tuiles
 
 // Mise en forme de la valeur brute de chaque couche (unites lisibles)
 const CARD = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
@@ -249,6 +263,9 @@ function fitWhenSized(bounds, tries = 0) {
 }
 
 function clearCurrent() {
+  stopStatusPoll();
+  setRefreshBadge(false);
+  lastGenereLe = null;
   for (const l of Object.values(rasterLayers)) map.removeLayer(l);
   for (const l of Object.values(vectorLayers)) map.removeLayer(l);
   if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
@@ -258,17 +275,27 @@ function clearCurrent() {
   rasterLayers = {}; vectorLayers = {};
 }
 
+// URL des tuiles d'une couche, avec un "cache-buster" lie a la date de generation
+// (change apres un rafraichissement -> force le rechargement des tuiles).
+function tileUrl(insee, id) {
+  return `/api/communes/${insee}/layers/${id}/{z}/{x}/{y}.png` + (tileV ? `?v=${tileV}` : "");
+}
+
 async function loadCommune(insee, nom) {
   clearCurrent();
   currentInsee = insee;
+  currentNom = nom;
 
-  const [layers, bounds, commune, priorites, meta] = await Promise.all([
+  const [layers, bounds, commune, priorites, meta, status] = await Promise.all([
     fetch(`/api/communes/${insee}/layers`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/bounds`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/commune`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/priorites`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/metadata`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/status`).then((r) => r.json()),
   ]);
+  lastGenereLe = status.genere_le;
+  tileV = (status.genere_le || "").replace(/\D/g, "");
   const llBounds = L.latLngBounds([bounds.south, bounds.west], [bounds.north, bounds.east]);
 
   // -- vecteurs --
@@ -291,7 +318,7 @@ async function loadCommune(insee, nom) {
   // -- couches raster = tuiles COG servies par /api/communes/{insee}/layers/{id}/{z}/{x}/{y}.png --
   layerSpecs = layers;
   for (const spec of layers) {
-    rasterLayers[spec.id] = L.tileLayer(`/api/communes/${insee}/layers/${spec.id}/{z}/{x}/{y}.png`, {
+    rasterLayers[spec.id] = L.tileLayer(tileUrl(insee, spec.id), {
       opacity: 0.7, bounds: llBounds, minZoom: 9, maxNativeZoom: 18, maxZoom: 19,
     });
     if (spec.default_on) rasterLayers[spec.id].addTo(map);
@@ -304,6 +331,44 @@ async function loadCommune(insee, nom) {
   // dimensionne avant de re-mesurer (invalidateSize) et cadrer.
   fitWhenSized(llBounds);
   updateFreshness(meta, nom, insee);
+  startStatusPoll(insee);
+}
+
+// ---------------------------------------------------------------------------
+// Rafraichissement automatique (Phase 3) : sur la commune AFFICHEE, on suit
+// /status ; un rafraichissement de fond -> badge discret puis rechargement
+// silencieux des tuiles, sans bouger la vue.
+// ---------------------------------------------------------------------------
+function setRefreshBadge(on) {
+  document.getElementById("refresh-badge").style.display = on ? "block" : "none";
+}
+function stopStatusPoll() {
+  if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+}
+function startStatusPoll(insee) {
+  stopStatusPoll();
+  statusTimer = setInterval(() => pollStatusOnce(insee), POLL_MS);
+}
+async function pollStatusOnce(insee) {
+  if (insee !== currentInsee) return;                 // la commune a change entre-temps
+  let s;
+  try { s = await fetch(`/api/communes/${insee}/status`).then((r) => r.json()); }
+  catch (e) { return; }
+  if (s.insee !== currentInsee) return;
+
+  if (s.statut === "ready" && s.genere_le && s.genere_le !== lastGenereLe) {
+    // un rafraichissement vient de se terminer -> recharger tuiles + fraicheur
+    lastGenereLe = s.genere_le;
+    tileV = s.genere_le.replace(/\D/g, "");
+    for (const [id, tl] of Object.entries(rasterLayers)) tl.setUrl(tileUrl(insee, id));
+    const meta = await fetch(`/api/communes/${insee}/metadata`).then((r) => r.json());
+    updateFreshness(meta, currentNom, insee);
+    setRefreshBadge(false);
+  } else if (lastGenereLe && ["stale", "queued", "running"].includes(s.statut)) {
+    setRefreshBadge(true);                            // rafraichissement en cours, carte conservee
+  } else {
+    setRefreshBadge(false);
+  }
 }
 
 function fillLegend() {

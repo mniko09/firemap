@@ -15,6 +15,7 @@ le rendu visuel (PNG/tuiles) sera fait proprement en Phase 2 v2.
 """
 import datetime as dt
 import json
+import os
 import traceback
 import warnings
 
@@ -61,6 +62,16 @@ def _log(ctx: CommuneContext, msg: str) -> None:
 def _present(*paths) -> bool:
     """True si TOUS les fichiers existent (une etape peut alors etre sautee)."""
     return all(p.exists() for p in paths)
+
+
+def _outdated(output, *inputs) -> bool:
+    """True si `output` doit etre (re)calcule : absent, ou plus ancien qu'au moins
+    une de ses `inputs`. Permet un rafraichissement SANS supprimer le fichier
+    servi -- il est ecrase seulement une fois le nouveau pret."""
+    if not output.exists():
+        return True
+    out_mtime = output.stat().st_mtime
+    return any(p.exists() and p.stat().st_mtime > out_mtime for p in inputs)
 
 
 def _recent_windows(lookbacks=_S2_LOOKBACKS_DAYS):
@@ -246,7 +257,11 @@ def _step_risk(ctx, grid, mask, pts_l93, force):
     risk_p = ctx.processed("risk.tif")
     classes_p = ctx.processed("risk_classes.tif")
     prio_p = ctx.processed("priorites.geojson")
-    if not force and _present(risk_p, classes_p, prio_p):
+    inputs = [ctx.processed(n) for n in
+              ("ndvi.tif", "ndmi.tif", "fwi.tif", "slope.tif", "aspect.tif", "fuel.tif", "enjeux.tif")]
+    # (re)calcule si un resultat manque OU si une couche source est plus recente
+    # (cas du rafraichissement : fwi.tif vient d'etre regenere)
+    if not force and _present(classes_p, prio_p) and not _outdated(risk_p, *inputs):
         return
 
     layers = compute_risk(mask, processed_dir=ctx.processed_dir)
@@ -279,7 +294,10 @@ def _step_cog(ctx, force):
     for spec in _LAYER_SPECS:
         src_p = ctx.processed(spec.filename)
         dst_p = ctx.processed(cog_name(spec.filename))
-        if not src_p.exists() or (not force and dst_p.exists()):
+        if not src_p.exists():
+            continue
+        # rebuild si le COG manque OU est plus ancien que sa source (rafraichissement)
+        if not force and not _outdated(dst_p, src_p):
             continue
 
         with rasterio.open(src_p) as src:
@@ -295,15 +313,19 @@ def _step_cog(ctx, force):
 
         # plus proche voisin partout : pas de melange de classes, pas de halo de
         # nan en bord de commune (a 10 m natif, l'ecart visuel est negligeable).
+        # Ecriture dans un fichier temporaire puis os.replace (atomique) : lors
+        # d'un rafraichissement, l'ancien COG continue d'etre servi jusqu'ici.
+        tmp_out = dst_p.parent / (dst_p.name + ".tmp")
         with rasterio.io.MemoryFile() as mem:
             with mem.open(**meta) as tmp:
                 tmp.write(data, 1)
             with mem.open() as tmp_r, warnings.catch_warnings():
                 # rio-cogeo emet un RuntimeWarning benin en castant le nodata nan
                 warnings.simplefilter("ignore", RuntimeWarning)
-                cog_translate(tmp_r, dst_p, profile, web_optimized=True, quiet=True,
+                cog_translate(tmp_r, tmp_out, profile, web_optimized=True, quiet=True,
                               in_memory=False, resampling="nearest",
                               overview_resampling="nearest")
+        os.replace(tmp_out, dst_p)
         faits.append(spec.id)
 
     if faits:
