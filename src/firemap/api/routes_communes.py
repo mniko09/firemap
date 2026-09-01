@@ -8,6 +8,7 @@ import requests
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from .. import jobs, registry
+from ..http import SESSION
 
 router = APIRouter(prefix="/api/communes", tags=["communes"])
 
@@ -31,7 +32,7 @@ def search_communes(q: str = Query(..., min_length=1, description="debut de nom 
     Renvoie au plus 10 communes, les plus peuplees d'abord :
     [{insee, nom, code_departement, population}]."""
     try:
-        resp = requests.get(
+        resp = SESSION.get(
             _GEO_API,
             params={
                 "nom": q,
@@ -39,7 +40,7 @@ def search_communes(q: str = Query(..., min_length=1, description="debut de nom 
                 "boost": "population",
                 "limit": 10,
             },
-            timeout=10,
+            timeout=(5, 15),   # autocompletion : on ne veut pas faire trop attendre
         )
         resp.raise_for_status()
     except requests.RequestException as exc:

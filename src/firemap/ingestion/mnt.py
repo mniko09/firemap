@@ -4,11 +4,11 @@ Aucune cle API necessaire (service ouvert data.geopf.fr).
 from typing import Tuple
 
 import numpy as np
-import requests
 from rasterio.transform import array_bounds
 from scipy.ndimage import uniform_filter
 
 from ..grid import ReferenceGrid
+from ..http import SESSION
 
 WMS_R_URL = "https://data.geopf.fr/wms-r/wms"
 LAYER = "ELEVATION.ELEVATIONGRIDCOVERAGE"
@@ -29,7 +29,7 @@ def fetch_elevation(grid: ReferenceGrid) -> np.ndarray:
         "WIDTH": grid.width,
         "HEIGHT": grid.height,
     }
-    resp = requests.get(WMS_R_URL, params=params, timeout=60)
+    resp = SESSION.get(WMS_R_URL, params=params, timeout=(10, 90))
     resp.raise_for_status()
     elevation = np.frombuffer(resp.content, dtype="<f4").reshape(grid.height, grid.width)
     return elevation.astype("float32").copy()

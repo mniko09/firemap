@@ -68,13 +68,13 @@ def sentinel2_has_newer(ctx: CommuneContext, sentinel2_asof: str | None,
 
 
 def commune_is_stale(ctx: CommuneContext, *, sentinel2_asof: str | None,
-                     date_fwi: str | None) -> list[str]:
+                     date_fwi: str | None, today: dt.date | None = None) -> list[str]:
     """Sources perimees pour cette commune : sous-ensemble de {'fwi', 'sentinel2'}.
     Liste vide = commune a jour. Le planificateur s'en sert pour n'invalider que
-    les couches concernees."""
+    les couches concernees. `today` : injectable pour les tests."""
     stale: list[str] = []
-    if fwi_has_newer(date_fwi):
+    if fwi_has_newer(date_fwi, today=today):
         stale.append("fwi")
-    if sentinel2_has_newer(ctx, sentinel2_asof):
+    if sentinel2_has_newer(ctx, sentinel2_asof, today=today):
         stale.append("sentinel2")
     return stale

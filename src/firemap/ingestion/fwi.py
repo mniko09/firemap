@@ -15,10 +15,10 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
-import requests
 from dotenv import load_dotenv
 
 from .. import config
+from ..http import SESSION
 
 DPCLIM_BASE = "https://public-api.meteofrance.fr/public/DPClim/v1"
 
@@ -37,11 +37,10 @@ def _api_key() -> str:
 
 
 def find_nearest_station(lat: float, lon: float, departement: str) -> dict:
-    resp = requests.get(
+    resp = SESSION.get(
         f"{DPCLIM_BASE}/liste-stations/quotidienne",
         headers={"apikey": _api_key()},
         params={"id-departement": departement},
-        timeout=30,
     )
     resp.raise_for_status()
     stations = [s for s in resp.json() if s.get("posteOuvert")]
@@ -51,7 +50,7 @@ def find_nearest_station(lat: float, lon: float, departement: str) -> dict:
 def fetch_daily_weather(station_id: str, date_deb: str, date_fin: str) -> pd.DataFrame:
     """Commande + telechargement des donnees climatologiques quotidiennes (CSV) DPClim."""
     headers = {"apikey": _api_key()}
-    resp = requests.get(
+    resp = SESSION.get(
         f"{DPCLIM_BASE}/commande-station/quotidienne",
         headers=headers,
         params={
@@ -59,17 +58,15 @@ def fetch_daily_weather(station_id: str, date_deb: str, date_fin: str) -> pd.Dat
             "date-deb-periode": date_deb,
             "date-fin-periode": date_fin,
         },
-        timeout=30,
     )
     resp.raise_for_status()
     cmde_id = resp.json()["elaboreProduitAvecDemandeResponse"]["return"]
 
     for _ in range(15):
-        resp = requests.get(
+        resp = SESSION.get(
             f"{DPCLIM_BASE}/commande/fichier",
             headers=headers,
             params={"id-cmde": cmde_id},
-            timeout=30,
         )
         if resp.status_code == 201:
             break

@@ -65,7 +65,8 @@ def main():
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(fwi_series["DATE"], fwi_series["FWI"], color="firebrick")
     ax.axhline(current_fwi, color="gray", linestyle="--", linewidth=1)
-    ax.set_title(f"FWI (indice Foret-Meteo) - station {station['nom']} (mai-juillet 2026)")
+    _periode = f"{fwi_series['DATE'].min():%d/%m/%Y} - {fwi_series['DATE'].max():%d/%m/%Y}"
+    ax.set_title(f"FWI (indice Foret-Meteo) - station {station['nom']} ({_periode})")
     ax.set_xlabel("Date")
     ax.set_ylabel("FWI")
     fig.autofmt_xdate()

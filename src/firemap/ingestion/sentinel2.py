@@ -47,6 +47,11 @@ def build_sh_config() -> SHConfig:
         "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/"
         "protocol/openid-connect/token"
     )
+    # Resilience (cf. firemap.http pour les appels 'requests' du reste du pipeline) :
+    # sentinelhub gere son propre HTTP -> on augmente ses tentatives et l'attente.
+    sh_config.max_download_attempts = 4
+    sh_config.download_sleep_time = 5.0
+    sh_config.download_timeout_seconds = 120.0
     return sh_config
 
 

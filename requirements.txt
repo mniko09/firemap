@@ -1,26 +1,32 @@
-# Traitement geospatial
-sentinelhub
-rasterio
-rio-tiler
-rio-cogeo
-geopandas
-numpy
-pandas
-shapely
-pyproj
-scipy
-Pillow
+# Versions figees (2026-09-01) pour une installation reproductible.
+# MAJ : mettre a jour puis relancer la suite de tests + une generation complete.
 
-# Cartographie / rendu
-folium
-matplotlib
+# --- Traitement geospatial ---
+sentinelhub==3.11.5
+rasterio==1.5.1
+rio-tiler==9.4.3
+rio-cogeo==7.0.2
+geopandas==1.1.4
+numpy==2.5.2
+pandas==3.0.5
+shapely==2.1.2
+pyproj==3.7.2
+scipy==1.18.1
+pillow==12.3.0
 
-# API
-fastapi
-uvicorn
-python-dotenv
-requests
-httpx
+# --- Cartographie / rendu ---
+folium==0.20.0
+matplotlib==3.11.1
 
-# Planificateur (rafraichissement automatique)
-apscheduler
+# --- API ---
+fastapi==0.141.1
+uvicorn==0.52.4
+python-dotenv==1.2.3
+requests==2.34.2
+httpx==0.28.1
+
+# --- Planificateur (rafraichissement automatique) ---
+APScheduler==3.11.3
+
+# --- Developpement / tests ---
+pytest==9.1.1

@@ -4,7 +4,8 @@ sensibilite au feu (0=incombustible, 1=tres inflammable) - hypothese a dire
 d'expert, a ajuster avec Brault (cf. Phase 4).
 """
 import geopandas as gpd
-import requests
+
+from ..http import SESSION
 
 WFS_URL = "https://data.geopf.fr/wfs/ows"
 LAYER = "BDTOPO_V3:zone_de_vegetation"
@@ -45,7 +46,7 @@ def fetch_vegetation_zones(bbox_l93) -> gpd.GeoDataFrame:
             "COUNT": PAGE_SIZE,
             "STARTINDEX": start_index,
         }
-        resp = requests.get(WFS_URL, params=params, timeout=60)
+        resp = SESSION.get(WFS_URL, params=params, timeout=(10, 90))
         resp.raise_for_status()
         fc = resp.json()
         features = fc.get("features", [])

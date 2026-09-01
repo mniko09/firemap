@@ -1,8 +1,8 @@
 """[1] Contour commune (GeoJSON) - source geo.api.gouv.fr (IGN)."""
 import geopandas as gpd
-import requests
 
 from .. import config
+from ..http import SESSION
 
 
 def fetch_commune_contour(
@@ -25,7 +25,7 @@ def fetch_commune_contour(
     # code -> 1 resultat exact ; nom -> recherche approximative (repli).
     params = {"code": code_insee, **champs} if code_insee else {"nom": nom, **champs}
 
-    resp = requests.get(url, params=params, timeout=30)
+    resp = SESSION.get(url, params=params)
     resp.raise_for_status()
     fc = resp.json()
     if not fc.get("features"):

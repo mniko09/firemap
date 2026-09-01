@@ -70,7 +70,7 @@ def extract_priority_zones(
             dists = enjeux_l93.geometry.distance(centroid)
             nearest = enjeux_l93.loc[dists.idxmin()]
             enjeu_categorie = nearest["categorie"]
-            enjeu_nom = nearest.get("raisonSociale") or nearest.get("nom_etablissement") or enjeu_categorie
+            enjeu_nom = nearest.get("nom") or enjeu_categorie
             enjeu_distance = float(dists.min())
         else:
             enjeu_categorie, enjeu_nom, enjeu_distance = None, None, None
