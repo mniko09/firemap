@@ -230,7 +230,7 @@ async function selectCommune(insee, nom) {
 
   if (s.statut === "error") { setStatus("Échec de la génération :<br><small>" + (s.erreur || "").split("\n")[0] + "</small>", true); return; }
   clearStatus();
-  await loadCommune(insee, nom);
+  await loadCommune(insee, s.nom || nom);   // s.nom : nom reel enregistre lors de la generation
 }
 
 async function pollUntilReady(insee) {
@@ -284,7 +284,7 @@ function tileUrl(insee, id) {
 async function loadCommune(insee, nom) {
   clearCurrent();
   currentInsee = insee;
-  currentNom = nom;
+  currentNom = nom || "";
 
   const [layers, bounds, commune, priorites, meta, status] = await Promise.all([
     fetch(`/api/communes/${insee}/layers`).then((r) => r.json()),
@@ -296,6 +296,7 @@ async function loadCommune(insee, nom) {
   ]);
   lastGenereLe = status.genere_le;
   tileV = (status.genere_le || "").replace(/\D/g, "");
+  currentNom = status.nom || meta.commune || nom || "";   // pour le bandeau au rafraichissement
   const llBounds = L.latLngBounds([bounds.south, bounds.west], [bounds.north, bounds.east]);
 
   // -- vecteurs --
@@ -380,8 +381,10 @@ function fillLegend() {
 fillLegend();
 
 function updateFreshness(meta, nom, insee) {
+  // meta.commune vaut "Nom (INSEE)" -> prioritaire ; sinon on retombe sur le nom passe
+  const titre = meta.commune || `${nom || "Commune"} (INSEE ${insee})`;
   document.getElementById("freshness").innerHTML =
-    `<b>${nom}</b> (INSEE ${insee})<br>` +
+    `<b>${titre}</b><br>` +
     `Sentinel-2 : <b>${meta.sentinel2_asof || "?"}</b> &nbsp;·&nbsp; ` +
     `FWI : <b>${meta.fwi_date || "?"}</b>` + (meta.fwi_station ? ` (station ${meta.fwi_station})` : "") + `<br>` +
     `Relief / végétation / enjeux : ${meta.sources_fetched || "?"}<br>` +
