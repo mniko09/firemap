@@ -30,10 +30,11 @@ from scipy.ndimage import distance_transform_edt
 
 from . import config, registry
 from .context import CommuneContext
+from .departements import search_batches
 from .grid import build_reference_grid, rasterize_commune_mask, save_gabarit
 from .ingestion.commune import load_or_fetch_commune
 from .ingestion.enjeux import fetch_enjeux_points
-from .ingestion.fwi import compute_fwi_series, fetch_daily_weather, find_nearest_station
+from .ingestion.fwi import compute_fwi_series, fetch_daily_weather, nearest_open_stations
 from .ingestion.landcover import assign_fuel_weight, fetch_vegetation_zones
 from .ingestion.mnt import compute_slope_aspect, fetch_elevation
 from .ingestion.sentinel2 import fetch_ndvi_ndmi
@@ -233,14 +234,32 @@ def _step_fwi(ctx, grid, gdf_wgs84, force) -> str | None:
         return _read_metadata(ctx).get("fwi_date")
 
     centroid = gdf_wgs84.geometry.iloc[0].centroid
-    station = find_nearest_station(centroid.y, centroid.x, departement=ctx.departement)
     today = dt.date.today()
-    weather = fetch_daily_weather(
-        station["id"],
-        (today - dt.timedelta(days=_FWI_LOOKBACK_DAYS)).isoformat() + "T00:00:00Z",
-        today.isoformat() + "T00:00:00Z",
-    )
-    last = compute_fwi_series(weather).dropna().iloc[-1]
+    debut = (today - dt.timedelta(days=_FWI_LOOKBACK_DAYS)).isoformat() + "T00:00:00Z"
+    fin = today.isoformat() + "T00:00:00Z"
+
+    # Toutes les stations ne mesurent pas humidite + vent (necessaires au FWI).
+    # On elargit la recherche par cercles concentriques -- departement local,
+    # puis reste de la region, puis regions limitrophes -- et on prend la
+    # premiere station qui fournit une serie FWI non vide.
+    station = last = None
+    for batch in search_batches(ctx.departement):
+        for st in nearest_open_stations(centroid.y, centroid.x, batch)[:8]:
+            serie = compute_fwi_series(fetch_daily_weather(st["id"], debut, fin)).dropna()
+            if not serie.empty:
+                station, last = st, serie.iloc[-1]
+                break
+        if station is not None:
+            break
+    if station is None:
+        raise RuntimeError(
+            "Aucune station Meteo-France mesurant temperature + humidite + vent + "
+            f"pluie trouvee a proximite de la commune {ctx.insee}."
+        )
+    if (today - last["DATE"].date()).days > 4:
+        _log(ctx, f"ATTENTION FWI : donnee la plus recente = {last['DATE'].date()} "
+                  f"(station {station['nom']} en retard de publication)")
+
     current_fwi = float(last["FWI"])
     _save_raster(fwi_p, np.full((grid.height, grid.width), current_fwi, dtype="float32"), grid)
 

@@ -36,15 +36,32 @@ def _api_key() -> str:
     return os.environ["METEOFRANCE_API_KEY"]
 
 
-def find_nearest_station(lat: float, lon: float, departement: str) -> dict:
+def _open_stations(departement: str) -> list[dict]:
+    """Stations 'quotidienne' OUVERTES d'un departement (DPClim exige id-departement)."""
     resp = SESSION.get(
         f"{DPCLIM_BASE}/liste-stations/quotidienne",
         headers={"apikey": _api_key()},
         params={"id-departement": departement},
     )
     resp.raise_for_status()
-    stations = [s for s in resp.json() if s.get("posteOuvert")]
-    return min(stations, key=lambda s: (s["lat"] - lat) ** 2 + (s["lon"] - lon) ** 2)
+    return [s for s in resp.json() if s.get("posteOuvert")]
+
+
+def nearest_open_stations(lat: float, lon: float, departements: list[str]) -> list[dict]:
+    """Stations ouvertes des departements donnes, triees par distance au point.
+    (Toutes ne mesurent pas l'humidite / le vent -> l'appelant essaie les
+    premieres jusqu'a en trouver une qui donne un FWI exploitable.)"""
+    pool: list[dict] = []
+    for dep in departements:
+        pool.extend(_open_stations(dep))
+    pool.sort(key=lambda s: (s["lat"] - lat) ** 2 + (s["lon"] - lon) ** 2)
+    return pool
+
+
+def find_nearest_station(lat: float, lon: float, departement: str) -> dict:
+    """Station la plus proche d'un seul departement. Conserve pour le script
+    legacy scripts/phase3b_fwi.py ; le pipeline v2 passe par nearest_open_stations."""
+    return nearest_open_stations(lat, lon, [departement])[0]
 
 
 def fetch_daily_weather(station_id: str, date_deb: str, date_fin: str) -> pd.DataFrame:
