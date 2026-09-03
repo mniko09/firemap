@@ -138,18 +138,24 @@ const VALUE_FMT = {
 //  momentanement masquee, rAF est suspendu et les tuiles restent invisibles.)
 const map = L.map("map", { zoomControl: true, fadeAnimation: false }).setView([43.7, 6.2], 9);
 
+// Pane dedie aux fonds de carte, SOUS les couches de risque (tilePane = 200).
+// Sinon, changer de fond ajoute ses tuiles par-dessus les overlays -> les
+// couches "disparaissent" derriere le fond.
+map.createPane("basemap");
+map.getPane("basemap").style.zIndex = 150;
+
 function geopf(layer, format) {
   return L.tileLayer(
     "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0" +
     "&LAYER=" + layer + "&STYLE=normal&FORMAT=" + format +
     "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}",
-    { attribution: "IGN-F / Géoplateforme", maxZoom: 19 }
+    { attribution: "IGN-F / Géoplateforme", maxZoom: 19, pane: "basemap" }
   );
 }
 const basePlanIGN = geopf("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png");
 const baseOrtho   = geopf("HR.ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg");
 const baseOSM     = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                                { attribution: "&copy; OpenStreetMap", maxZoom: 19 });
+                                { attribution: "&copy; OpenStreetMap", maxZoom: 19, pane: "basemap" });
 const overlayCadastre = geopf("CADASTRALPARCELS.PARCELLAIRE_EXPRESS", "image/png");
 overlayCadastre.setOpacity(0.5);   // fond de tuile non transparent -> opacite reduite
 
@@ -320,7 +326,7 @@ async function loadCommune(insee, nom) {
   layerSpecs = layers;
   for (const spec of layers) {
     rasterLayers[spec.id] = L.tileLayer(tileUrl(insee, spec.id), {
-      opacity: 0.7, bounds: llBounds, minZoom: 9, maxNativeZoom: 18, maxZoom: 19,
+      opacity: 0.85, bounds: llBounds, minZoom: 9, maxNativeZoom: 18, maxZoom: 19,
     });
     if (spec.default_on) rasterLayers[spec.id].addTo(map);
   }
@@ -406,7 +412,7 @@ function buildPanel(layers) {
     row.innerHTML =
       `<label><input type="checkbox" ${spec.default_on ? "checked" : ""}> ` +
       `${spec.label} <span class="unit">${spec.unit || ""}</span></label>` +
-      `<input type="range" min="0" max="100" value="${Math.round((tl.options.opacity ?? 0.7) * 100)}">`;
+      `<input type="range" min="0" max="100" value="${Math.round((tl.options.opacity ?? 0.85) * 100)}">`;
     const cb = row.querySelector('input[type=checkbox]');
     const slider = row.querySelector('input[type=range]');
     cb.onchange = () => (cb.checked ? tl.addTo(map) : map.removeLayer(tl));
