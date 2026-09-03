@@ -1,0 +1,37 @@
+# FIREMAP v2 -- deploiement de base.
+#
+# Prerequis sur l'hote : Docker + Docker Compose, et un fichier .env a cote de ce
+# fichier contenant :
+#   CDSE_CLIENT_ID=...        CDSE_CLIENT_SECRET=...      (Copernicus)
+#   METEOFRANCE_API_KEY=...   (Meteo-France DPClim)
+#
+#   docker compose up -d --build      # build + demarre
+#   docker compose logs -f            # suit les logs (pipeline, planificateur)
+#   docker compose down               # arrete (le volume firemap-data est conserve)
+#
+# TLS / nom de domaine : voir DEPLOY.md
+#   - surcouche Caddy (HTTPS automatique)  : docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+#   - ou load-balancer manage du fournisseur (Scaleway / OVHcloud) qui termine le TLS
+
+services:
+  firemap:
+    build: .
+    image: firemap:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"          # derriere un reverse proxy : remplacer par "127.0.0.1:8000:8000"
+    volumes:
+      # Volume NOMME : au 1er demarrage, Docker y recopie data/priority_communes.json
+      # embarque dans l'image ; ensuite tout (communes generees, firemap.sqlite)
+      # persiste ici entre les redemarrages.
+      - firemap-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  firemap-data:

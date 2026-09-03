@@ -1,10 +1,24 @@
-venv/
-.env
-.env.example
-__pycache__/
-*.pyc
-data/raw/
-outputs/
+# Contexte de build minimal : seuls src/, web/, requirements.txt, pyproject.toml
+# et data/priority_communes.json sont necessaires (cf. Dockerfile).
 .git/
 .claude/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+.env
+.env.example
+
+# donnees generees / locales -- SAUF la liste des communes prioritaires
+data/*
+!data/priority_communes.json
+
+outputs/
+tests/
 scripts/
+requirements-dev.txt
+docker-compose*.yml
+Caddyfile
+*.md

@@ -1,0 +1,4 @@
+# Dependances de developpement uniquement (pas dans l'image de production).
+# Installation : pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+pytest==9.1.1
