@@ -1,0 +1,9 @@
+# Reverse proxy + HTTPS automatique (Let's Encrypt) devant l'API FIREMAP.
+# Le domaine vient de la variable d'environnement FIREMAP_DOMAIN (voir .env).
+# Utilise avec docker-compose.caddy.yml.
+
+{$FIREMAP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy firemap:8000
+	# Les tuiles portent deja leur Cache-Control (application) ; Caddy le relaie.
+}

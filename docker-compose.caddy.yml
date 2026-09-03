@@ -1,0 +1,32 @@
+# Surcouche : ajoute Caddy (HTTPS automatique via Let's Encrypt) devant l'API.
+#
+# Prerequis :
+#   - un nom de domaine dont l'enregistrement A/AAAA pointe vers cette machine ;
+#   - FIREMAP_DOMAIN dans le .env  (ex. FIREMAP_DOMAIN=firemap.selvert.fr).
+#   - dans docker-compose.yml, restreindre l'exposition directe :
+#       ports: ["127.0.0.1:8000:8000"]   (ou fermer le port 8000 au pare-feu)
+#
+#   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
+#
+# Alternative sans Caddy : un load-balancer manage du fournisseur (Scaleway /
+# OVHcloud) qui termine le TLS et pointe sur le port 8000 de l'instance.
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      FIREMAP_DOMAIN: ${FIREMAP_DOMAIN:?definir FIREMAP_DOMAIN dans le .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # certificats Let's Encrypt (a conserver)
+      - caddy-config:/config
+    depends_on:
+      - firemap
+
+volumes:
+  caddy-data:
+  caddy-config:
