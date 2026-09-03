@@ -14,11 +14,13 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # Timeout par defaut (connexion, lecture) si l'appelant n'en passe pas.
-DEFAULT_TIMEOUT = (10, 60)
+# Connexion genereuse : certaines API publiques (geo.api.gouv.fr) mettent
+# plusieurs secondes rien qu'a etablir la connexion sur un reseau lent.
+DEFAULT_TIMEOUT = (20, 90)
 
 _retry = Retry(
-    total=3, connect=3, read=3, status=3,
-    backoff_factor=1,                       # attentes : 0 s, 2 s, 4 s
+    total=5, connect=5, read=5, status=5,
+    backoff_factor=2,                       # attentes : 0 s, 4 s, 8 s, 16 s, 32 s
     status_forcelist=(429, 500, 502, 503, 504),
     allowed_methods=frozenset(("GET", "POST")),
     raise_on_status=False,
