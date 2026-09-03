@@ -245,7 +245,11 @@ def _step_fwi(ctx, grid, gdf_wgs84, force) -> str | None:
     station = last = None
     for batch in search_batches(ctx.departement):
         for st in nearest_open_stations(centroid.y, centroid.x, batch)[:8]:
-            serie = compute_fwi_series(fetch_daily_weather(st["id"], debut, fin)).dropna()
+            try:
+                serie = compute_fwi_series(fetch_daily_weather(st["id"], debut, fin)).dropna()
+            except Exception as exc:   # DPClim lent / HS pour CETTE station -> suivante
+                _log(ctx, f"station {st['nom']} ignoree ({type(exc).__name__})")
+                continue
             if not serie.empty:
                 station, last = st, serie.iloc[-1]
                 break
@@ -253,8 +257,9 @@ def _step_fwi(ctx, grid, gdf_wgs84, force) -> str | None:
             break
     if station is None:
         raise RuntimeError(
-            "Aucune station Meteo-France mesurant temperature + humidite + vent + "
-            f"pluie trouvee a proximite de la commune {ctx.insee}."
+            f"FWI indisponible pour {ctx.insee} : aucune station Meteo-France proche ne "
+            "fournit temperature + humidite + vent + pluie (ou DPClim est indisponible). "
+            "Reessayer plus tard."
         )
     if (today - last["DATE"].date()).days > 4:
         _log(ctx, f"ATTENTION FWI : donnee la plus recente = {last['DATE'].date()} "

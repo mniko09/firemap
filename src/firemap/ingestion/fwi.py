@@ -79,7 +79,10 @@ def fetch_daily_weather(station_id: str, date_deb: str, date_fin: str) -> pd.Dat
     resp.raise_for_status()
     cmde_id = resp.json()["elaboreProduitAvecDemandeResponse"]["return"]
 
-    for _ in range(15):
+    # Le fichier est prepare de facon ASYNCHRONE cote Meteo-France. Tant qu'il
+    # n'est pas pret, DPClim repond 204 OU 404 (selon la charge / le moment) --
+    # ce n'est pas une vraie erreur, on continue d'interroger. 201 = pret.
+    for _ in range(30):
         resp = SESSION.get(
             f"{DPCLIM_BASE}/commande/fichier",
             headers=headers,
@@ -87,12 +90,14 @@ def fetch_daily_weather(station_id: str, date_deb: str, date_fin: str) -> pd.Dat
         )
         if resp.status_code == 201:
             break
-        if resp.status_code == 204:
-            time.sleep(2)
+        if resp.status_code in (204, 404, 500, 502, 503):
+            time.sleep(3)
             continue
         resp.raise_for_status()
     else:
-        raise TimeoutError("DPClim : fichier non pret apres plusieurs tentatives")
+        raise TimeoutError(
+            f"DPClim : fichier (commande {cmde_id}) non pret apres ~90 s -- reessayer plus tard"
+        )
 
     df = pd.read_csv(StringIO(resp.text), sep=";", decimal=",")
     df["DATE"] = pd.to_datetime(df["DATE"], format="%Y%m%d")
