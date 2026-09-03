@@ -29,6 +29,12 @@ from ..storage import LAYERS
 
 router = APIRouter(prefix="/api/communes/{insee}", tags=["couches"])
 
+# Les tuiles sont immuables tant que la commune n'est pas regeneree, et le
+# frontend versionne deja l'URL (?v=<genere_le>). Un reverse proxy / CDN peut
+# donc les mettre en cache longtemps -> decharge le principal chemin chaud
+# (cf. scripts/loadtest.py : le rendu de tuile est le poste CPU dominant).
+_TILE_CACHE = {"Cache-Control": "public, max-age=604800, immutable"}
+
 _LAYER_BY_ID = {s.id: s for s in LAYERS}
 _TO_L93 = Transformer.from_crs(config.CRS_WEB, config.CRS_COMPUTE, always_xy=True)
 
@@ -107,7 +113,7 @@ def layer_tile(insee: str, layer_id: str, z: int, x: int, y: int):
         with Reader(str(cog)) as src:
             img = src.tile(x, y, z)
     except TileOutsideBounds:
-        return Response(content=_EMPTY_TILE, media_type="image/png")
+        return Response(content=_EMPTY_TILE, media_type="image/png", headers=_TILE_CACHE)
 
     if spec.categorical:
         png = img.render(img_format="PNG", colormap=_RISK_CMAP)
@@ -115,7 +121,7 @@ def layer_tile(insee: str, layer_id: str, z: int, x: int, y: int):
         vmin, vmax = _range_for(ctx, spec)
         img.rescale(in_range=((vmin, vmax),))
         png = img.render(img_format="PNG", colormap=_colormap(spec.cmap))
-    return Response(content=png, media_type="image/png")
+    return Response(content=png, media_type="image/png", headers=_TILE_CACHE)
 
 
 @router.get("/bounds")
