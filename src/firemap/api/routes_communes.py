@@ -4,15 +4,33 @@ Ces routes ne calculent JAMAIS dans le fil de la requete : elles lisent le
 registre et, si besoin, delegent a firemap.jobs (tache de fond). Le frontend
 appelle /search pour resoudre un nom, puis /status en boucle courte.
 """
+import json
+
 import requests
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from .. import jobs, registry
+from .. import config, jobs, registry
 from ..http import SESSION
 
 router = APIRouter(prefix="/api/communes", tags=["communes"])
 
 _GEO_API = "https://geo.api.gouv.fr/communes"
+
+# Liste blanche OPTIONNELLE des communes autorisees a une PREMIERE generation
+# (cf. Option A discutee avec SELVERT : eviter que n'importe qui declenche des
+# generations -- couteuses en appels API -- pour une commune non contractualisee).
+# Fichier absent = pas de restriction (comportement actuel, rien ne casse si on
+# ne cree pas ce fichier). Vit dans le volume Docker, comme priority_communes.json
+# -- pas dans le code : pas besoin de redeployer pour l'editer.
+_ALLOWED_FILE = config.DATA_DIR / "allowed_communes.json"
+
+
+def _allowed_communes() -> list[str] | None:
+    """None = pas de restriction. Sinon, liste des codes INSEE autorises."""
+    try:
+        return [str(x) for x in json.loads(_ALLOWED_FILE.read_text(encoding="utf-8"))]
+    except (OSError, ValueError):
+        return None
 
 
 def _valid_insee(insee: str) -> bool:
@@ -103,5 +121,13 @@ def generate_commune(
     relance pas. Repond immediatement avec le statut courant (jamais bloquant)."""
     if not _valid_insee(insee):
         raise HTTPException(status_code=422, detail="code INSEE invalide")
+
+    allowed = _allowed_communes()
+    if allowed is not None and insee not in allowed and registry.get(insee) is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Commune non autorisee pour le moment -- contactez SELVERT.",
+        )
+
     jobs.submit(insee, nom, force=force)
     return _status_payload(insee)
