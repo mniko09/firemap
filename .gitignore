@@ -20,6 +20,9 @@ data/firemap.sqlite-shm
 # sorties generees par commune (v2)
 data/communes/
 
+# sorties du backtest historique (regenerables via scripts/backtest_historical.py)
+data/backtest/
+
 # donnees generees mono-commune (legacy Phase 0) - regenerables via le pipeline
 data/processed/
 data/boundaries/

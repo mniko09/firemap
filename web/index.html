@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIREMAP - Risque incendie communal</title>
+<title> SELVERT FIREMAP - Risque incendie communal</title>
 <link rel="stylesheet" href="vendor/leaflet-1.9.4/leaflet.css" />
 <style>
   html, body { margin: 0; height: 100%; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   #map { position: absolute; inset: 0; }
 
-  /* --- Barre de recherche (haut) --- */
+  /* --- Barre de recherche (haut gauche) --- */
   #searchbar {
     position: absolute; top: 12px; left: 50px; z-index: 1200; width: 320px;
     background: #fff; border-radius: 8px; box-shadow: 0 1px 8px rgba(0,0,0,.3);
@@ -48,32 +48,84 @@
 
   #legend-box { padding: 8px 12px; line-height: 1.7; }
   #legend-box .sw { display: inline-block; width: 14px; height: 14px; margin-right: 6px; border-radius: 3px; vertical-align: middle; }
-  #legend-box .prio { display: inline-block; width: 14px; height: 10px; margin-right: 6px; border: 2px solid #000; vertical-align: middle; }
+  #legend-box .prio {
+    display: inline-block; width: 14px; height: 14px; margin-right: 6px; border-radius: 50%;
+    background: #c0392b; border: 2px solid #fff; box-shadow: 0 0 0 1px #333; vertical-align: middle;
+  }
   .popup-title { font-weight: 600; margin-bottom: 4px; }
   .popup-action { margin-top: 6px; padding: 6px 8px; background: #fdf3e7; border-left: 3px solid #e67e22; }
+  .popup-coords { margin-top: 6px; font-size: 11px; color: #666; }
   .leaflet-control-layers { font-size: 13px; max-height: 78vh; overflow-y: auto; }
 
-  /* --- Panneau couches + valeur (haut droite) --- */
+  /* --- Panneau unique (haut droite), theme sombre esprit maquette SELVERT.
+     Ordre des sections voulu par Nicolas : Risque incendie, Resume, Point
+     clique, Legende, puis Zones prioritaires (repliable) en dernier. --- */
   #panel {
-    position: absolute; top: 12px; right: 12px; z-index: 1000; width: 272px;
-    max-height: calc(100vh - 90px); overflow-y: auto;
-    background: #fff; border-radius: 8px; box-shadow: 0 1px 8px rgba(0,0,0,.3); font-size: 13px;
+    position: absolute; top: 12px; right: 12px; z-index: 1000; width: 300px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+    background: #1b2430; color: #e8eaed; border-radius: 8px;
+    box-shadow: 0 1px 8px rgba(0,0,0,.4); font-size: 13px;
   }
-  #panel h4 { margin: 0; padding: 8px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
-              color: #666; background: #f6f7f9; border-bottom: 1px solid #eee; }
-  #panel .sec { border-bottom: 1px solid #eee; }
+  #panel h4 {
+    margin: 0; padding: 8px 12px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
+    color: #f0a868; background: #222c3a; border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  #panel .sec { border-bottom: 1px solid rgba(255,255,255,.08); }
+  /* section repliable (ex. Zones prioritaires) : clic sur l'entete = cacher/montrer */
+  h4.collapsible { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  h4.collapsible .chevron { transition: transform .15s; font-size: 10px; }
+  .sec.collapsed .chevron { transform: rotate(-90deg); }
+  .sec.collapsed > div { display: none; }
   .lrow { padding: 6px 12px; }
   .lrow label { display: block; cursor: pointer; }
-  .lrow .unit { color: #999; font-size: 11px; }
-  .lrow input[type=range] { width: 100%; margin: 4px 0 0; accent-color: #c0392b; }
+  .lrow .unit { color: #93a0b3; font-size: 11px; }
+  .lrow input[type=range] { width: 100%; margin: 4px 0 0; accent-color: #e67e22; }
   .lrow.vrow input[type=range] { display: none; }
-  #value-box { padding: 8px 12px; }
-  #value-box .hint { color: #999; }
-  #value-box .coords { font-family: ui-monospace, monospace; font-size: 11px; color: #555; margin-bottom: 6px; }
-  #value-box table { width: 100%; border-collapse: collapse; }
-  #value-box td { padding: 3px 0; border-bottom: 1px dotted #e5e5e5; }
-  #value-box td:last-child { text-align: right; font-weight: 600; white-space: nowrap; }
-  #value-box .sw { display: inline-block; width: 11px; height: 11px; margin-right: 4px; border-radius: 2px; vertical-align: middle; }
+
+  /* Hauteur fixe : sans ca, la fiche passe de 1 ligne (hint) a 9 lignes de
+     donnees a chaque clic, ce qui pousse "Legende" et "Zones prioritaires"
+     en dessous -> tout le panneau semble "sauter". */
+  #value-box { padding: 8px 12px; height: 210px; overflow-y: auto; }
+  #value-box .hint { color: #93a0b3; }
+  #value-box .coords { font-family: ui-monospace, monospace; font-size: 11px; color: #93a0b3; margin-bottom: 6px; }
+  #value-box dl { margin: 0; display: grid; grid-template-columns: 1fr auto; row-gap: 3px; column-gap: 8px; }
+  #value-box dt { color: #b7c0cd; font-weight: 400; }
+  #value-box dd { margin: 0; text-align: right; font-weight: 600; white-space: nowrap; }
+  #value-box dd.risk-line { grid-column: 1 / -1; text-align: left; font-size: 14px; padding-bottom: 4px;
+                             border-bottom: 1px dotted rgba(255,255,255,.15); margin-bottom: 2px; }
+  .sw { display: inline-block; width: 11px; height: 11px; margin-right: 4px; border-radius: 2px; vertical-align: middle; }
+
+  #summary-box { padding: 8px 12px; }
+  #summary-box .srow { padding: 2px 0; }
+
+  /* --- Liste des zones prioritaires (checklist "deja traite") --- */
+  #zones-list { padding: 4px 0; }
+  .zrow { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; }
+  .zrow:hover { background: rgba(255,255,255,.06); }
+  .zrow .ztxt { flex: 1; min-width: 0; }
+  .zrow .ztxt .zclasse { font-weight: 600; }
+  .zrow .ztxt .zdet { color: #93a0b3; font-size: 11px; }
+  .zrow .zlink { color: #f0a868; font-size: 11px; text-decoration: none; }
+  .zrow .zlink:hover { text-decoration: underline; }
+
+  #pdf-link {
+    display: block; text-align: center; background: #c0392b; color: #fff;
+    padding: 7px 10px; border-radius: 6px; text-decoration: none;
+    font-size: 12.5px; font-weight: 600;
+  }
+  #pdf-link:hover { background: #a5311f; }
+  .zrow.done .ztxt { opacity: .5; text-decoration: line-through; }
+  .zrow input[type=checkbox] { accent-color: #2ca02c; cursor: pointer; }
+  .zrow input[type=checkbox]:hover { transform: scale(1.05); }
+
+  /* Pastille numerotee sur la carte (remplace l'ancien contour+remplissage rouge,
+     qui se confondait visuellement avec le degrade de risque). */
+  .leaflet-div-icon.zone-marker { background: transparent; border: none; }
+  .zone-marker span {
+    display: flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+    border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700;
+    border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.6);
+  }
 
   /* --- Badge "rafraichissement en cours" (non bloquant, haut centre) --- */
   #refresh-badge {
@@ -81,21 +133,44 @@
     display: none; background: #34495e; color: #fff; padding: 5px 12px; border-radius: 14px;
     font-size: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.3);
   }
+
+  /* --- Alarme "zones a traiter" (sous la barre de recherche) --- */
+  #alert-banner {
+    position: absolute; top: 70px; left: 50px; z-index: 1150; width: 320px;
+    display: none; background: #c0392b; color: #fff; padding: 8px 34px 8px 12px; border-radius: 8px;
+    font-size: 12.5px; line-height: 1.5; box-shadow: 0 1px 8px rgba(0,0,0,.3);
+    cursor: pointer;
+  }
+  #alert-banner b { font-size: 13px; }
+  #alert-banner .close-x {
+    position: absolute; top: 4px; right: 6px; width: 20px; height: 20px; line-height: 20px;
+    text-align: center; border-radius: 50%; font-size: 14px; color: #fff; opacity: .8;
+  }
+  #alert-banner .close-x:hover { background: rgba(255,255,255,.2); opacity: 1; }
 </style>
 </head>
 <body>
 <div id="searchbar">
-  <div class="brand">FIREMAP &middot; risque incendie communal</div>
+  <div class="brand"> SELVERT FIREMAP &middot; risque incendie communal</div>
   <input id="q" type="text" placeholder="Rechercher une commune..." autocomplete="off" />
   <ul id="results"></ul>
 </div>
 <div id="status"></div>
 <div id="refresh-badge">↻ Rafraîchissement des données en cours…</div>
+<div id="alert-banner"></div>
 <div id="freshness">Chargement...</div>
 <div id="panel">
-  <div class="sec"><h4>Couches</h4><div id="layers-list"></div></div>
-  <div class="sec"><h4>Valeur au point</h4><div id="value-box"><span class="hint">Cliquez sur la carte pour lire chaque couche ici.</span></div></div>
+  <div class="sec" style="padding:8px 10px">
+    <a id="pdf-link" href="#" target="_blank" rel="noopener">📄 Télécharger le rapport (PDF)</a>
+  </div>
+  <div class="sec"><h4>Risque incendie</h4><div id="layer-row"></div></div>
+  <div class="sec"><h4>Point cliqué</h4><div id="value-box"><span class="hint">Cliquez sur la carte pour voir le détail à cet endroit.</span></div></div>
   <div class="sec"><h4>Légende</h4><div id="legend-box"></div></div>
+   <div class="sec"><h4>Résumé</h4><div id="summary-box"><span class="hint">Chargement…</span></div></div>
+  <div class="sec" id="zones-sec">
+    <h4 class="collapsible" id="zones-toggle">Zones prioritaires <span class="chevron">▾</span></h4>
+    <div id="zones-list"><span class="hint" style="padding:6px 12px;display:block">Chargement…</span></div>
+  </div>
 </div>
 <div id="map"></div>
 
@@ -107,28 +182,14 @@ const RISK_LABELS = { 1: "Faible", 2: "Modéré", 3: "Élevé", 4: "Très élev�
 const RISK_COLORS = { 1: "#2ca02c", 2: "#f1c40f", 3: "#e67e22", 4: "#c0392b" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Etat courant (commune affichee, specs de ses couches, marqueur du dernier clic)
-let currentInsee = null, currentNom = "", layerSpecs = [], clickMarker = null;
+// Etat courant (commune affichee, marqueur du dernier clic)
+let currentInsee = null, currentNom = "", clickMarker = null;
 
 // Suivi du rafraichissement automatique (Phase 3)
 const POLL_MS = 60000;            // frequence d'interrogation de /status
 let statusTimer = null;           // handle du setInterval
 let lastGenereLe = null;          // horodatage de generation vu la derniere fois
 let tileV = "";                   // "cache-buster" ajoute a l'URL des tuiles
-
-// Mise en forme de la valeur brute de chaque couche (unites lisibles)
-const CARD = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
-const VALUE_FMT = {
-  risk_classes:    (v) => v == null ? "—" : `<span class="sw" style="background:${RISK_COLORS[v]}"></span>${RISK_LABELS[v] || v}`,
-  risk:            (v) => v == null ? "—" : v.toFixed(3),
-  secheresse_ndmi: (v) => v == null ? "—" : v.toFixed(2),
-  vigueur_ndvi:    (v) => v == null ? "—" : v.toFixed(2),
-  fwi:             (v) => v == null ? "—" : v.toFixed(1),
-  pente:           (v) => v == null ? "—" : v.toFixed(1) + " °",
-  exposition:      (v) => v == null ? "—" : Math.round(v) + " ° (" + CARD[Math.round((v % 360) / 45) % 8] + ")",
-  combustible:     (v) => v == null ? "—" : v.toFixed(2),
-  enjeux:          (v) => v == null ? "—" : Math.round(v) + " m",
-};
 
 // ---------------------------------------------------------------------------
 // Carte + fonds IGN Geoplateforme (data.geopf.fr, gratuits, sans cle - cf. §4.3bis)
@@ -253,6 +314,11 @@ async function pollUntilReady(insee) {
 // ---------------------------------------------------------------------------
 let rasterLayers = {};       // id -> L.tileLayer
 let vectorLayers = {};       // commune / priorites
+let zoneLayerByKey = {};     // zone_key -> L.layer (pour "se diriger vers cette zone")
+let zoneStatut = {};         // zone_key -> horodatage "traite" (absent = pas traite)
+let currentPriorites = null; // dernier GeoJSON zones prioritaires charge
+let currentResume = null;    // dernier /risque/resume charge (pour re-rendre apres une coche)
+let bannerDismissed = false; // "x" de l'alarme, remis a false a chaque commune
 
 function fitWhenSized(bounds, tries = 0) {
   map.invalidateSize();
@@ -275,10 +341,14 @@ function clearCurrent() {
   for (const l of Object.values(rasterLayers)) map.removeLayer(l);
   for (const l of Object.values(vectorLayers)) map.removeLayer(l);
   if (clickMarker) { map.removeLayer(clickMarker); clickMarker = null; }
-  document.getElementById("layers-list").innerHTML = "";
+  document.getElementById("layer-row").innerHTML = "";
+  document.getElementById("summary-box").innerHTML = '<span class="hint">Chargement…</span>';
+  document.getElementById("zones-list").innerHTML = '<span class="hint" style="padding:6px 12px;display:block">Chargement…</span>';
+  document.getElementById("alert-banner").style.display = "none";
   document.getElementById("value-box").innerHTML =
-    '<span class="hint">Cliquez sur la carte pour lire chaque couche ici.</span>';
-  rasterLayers = {}; vectorLayers = {};
+    '<span class="hint">Cliquez sur la carte pour voir le détail à cet endroit.</span>';
+  rasterLayers = {}; vectorLayers = {}; zoneLayerByKey = {}; zoneStatut = {};
+  currentPriorites = null; bannerDismissed = false;
 }
 
 // URL des tuiles d'une couche, avec un "cache-buster" lie a la date de generation
@@ -291,46 +361,40 @@ async function loadCommune(insee, nom) {
   clearCurrent();
   currentInsee = insee;
   currentNom = nom || "";
+  document.getElementById("pdf-link").href = `/api/communes/${insee}/rapport.pdf`;
 
-  const [layers, bounds, commune, priorites, meta, status] = await Promise.all([
+  const [layers, bounds, commune, priorites, meta, status, resume, statut] = await Promise.all([
     fetch(`/api/communes/${insee}/layers`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/bounds`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/commune`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/priorites`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/metadata`).then((r) => r.json()),
     fetch(`/api/communes/${insee}/status`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/risque/resume`).then((r) => r.json()),
+    fetch(`/api/communes/${insee}/zones/statut`).then((r) => r.json()),
   ]);
   lastGenereLe = status.genere_le;
   tileV = (status.genere_le || "").replace(/\D/g, "");
   currentNom = status.nom || meta.commune || nom || "";   // pour le bandeau au rafraichissement
+  currentPriorites = priorites;
+  currentResume = resume;
+  zoneStatut = statut;
   const llBounds = L.latLngBounds([bounds.south, bounds.west], [bounds.north, bounds.east]);
 
   // -- vecteurs --
   vectorLayers.commune = L.geoJSON(commune, { style: { color: "#111", weight: 2, fill: false } }).addTo(map);
-  vectorLayers.priorites = L.geoJSON(priorites, {
-    style: { color: "#000", weight: 2, fillColor: "#c0392b", fillOpacity: 0.25 },
-    onEachFeature: (f, layer) => {
-      const p = f.properties;
-      layer.bindPopup(
-        `<div class="popup-title">Zone prioritaire #${p.id} — ${p.classe_risque}</div>` +
-        `Surface : ${(p.surface_m2 / 10000).toFixed(2)} ha<br>` +
-        `Score de priorité : ${p.score_priorite}<br>` +
-        `Enjeu le plus proche : ${p.enjeu_proche || p.categorie_enjeu || "n/a"}` +
-        (p.distance_enjeu_m != null ? ` (${p.distance_enjeu_m.toFixed(0)} m)` : "") +
-        `<div class="popup-action"><b>Action :</b><br>${p.action_recommandee}</div>`
-      );
-    },
-  }).addTo(map);
+  vectorLayers.priorites = buildPrioritesLayer(priorites).addTo(map);
 
-  // -- couches raster = tuiles COG servies par /api/communes/{insee}/layers/{id}/{z}/{x}/{y}.png --
-  layerSpecs = layers;
+  // -- couche raster (risque) = tuiles COG servies par /api/communes/{insee}/layers/{id}/{z}/{x}/{y}.png --
   for (const spec of layers) {
     rasterLayers[spec.id] = L.tileLayer(tileUrl(insee, spec.id), {
       opacity: 0.85, bounds: llBounds, minZoom: 9, maxNativeZoom: 18, maxZoom: 19,
-    });
-    if (spec.default_on) rasterLayers[spec.id].addTo(map);
+    }).addTo(map);
+    buildLayerRow(spec);
   }
-  buildPanel(layers);
+  renderZonesList();
+  renderSummary(currentResume);
+  refreshBanner();
 
   // Cadrage : au 1er chargement, le conteneur peut ne pas avoir sa taille finale
   // quand ce code s'execute (Leaflet mesurerait 0 px -> fitBounds retombe au
@@ -364,12 +428,25 @@ async function pollStatusOnce(insee) {
   if (s.insee !== currentInsee) return;
 
   if (s.statut === "ready" && s.genere_le && s.genere_le !== lastGenereLe) {
-    // un rafraichissement vient de se terminer -> recharger tuiles + fraicheur
+    // un rafraichissement vient de se terminer -> recharger tuiles + fraicheur + resume + zones
     lastGenereLe = s.genere_le;
     tileV = s.genere_le.replace(/\D/g, "");
     for (const [id, tl] of Object.entries(rasterLayers)) tl.setUrl(tileUrl(insee, id));
-    const meta = await fetch(`/api/communes/${insee}/metadata`).then((r) => r.json());
+    const [meta, resume, priorites, statut] = await Promise.all([
+      fetch(`/api/communes/${insee}/metadata`).then((r) => r.json()),
+      fetch(`/api/communes/${insee}/risque/resume`).then((r) => r.json()),
+      fetch(`/api/communes/${insee}/priorites`).then((r) => r.json()),
+      fetch(`/api/communes/${insee}/zones/statut`).then((r) => r.json()),
+    ]);
+    currentPriorites = priorites;
+    currentResume = resume;
+    zoneStatut = statut;
+    map.removeLayer(vectorLayers.priorites);                 // les zones peuvent avoir change
+    vectorLayers.priorites = buildPrioritesLayer(priorites).addTo(map);
     updateFreshness(meta, currentNom, insee);
+    renderZonesList();
+    renderSummary(currentResume);
+    refreshBanner();
     setRefreshBadge(false);
   } else if (lastGenereLe && ["stale", "queued", "running"].includes(s.statut)) {
     setRefreshBadge(true);                            // rafraichissement en cours, carte conservee
@@ -386,49 +463,217 @@ function fillLegend() {
 }
 fillLegend();
 
+// Section "Zones prioritaires" repliable (cacher/montrer la liste, sans y
+// toucher sur la carte -- l'affichage des zones sur la carte reste gere par
+// la case "Zones prioritaires retardant" dans "Risque incendie").
+document.getElementById("zones-toggle").onclick = () => {
+  document.getElementById("zones-sec").classList.toggle("collapsed");
+};
+
 function updateFreshness(meta, nom, insee) {
   // meta.commune vaut "Nom (INSEE)" -> prioritaire ; sinon on retombe sur le nom passe
   const titre = meta.commune || `${nom || "Commune"} (INSEE ${insee})`;
+
+  // Indicateur de confiance : la station FWI la plus proche peut etre a 40+ km
+  // dans les secteurs mal couverts par le reseau Meteo-France -- on le signale
+  // au lieu de laisser croire que la donnee est aussi fiable partout.
+  const dist = meta.fwi_station_distance_km;
+  let stationTxt = "";
+  if (meta.fwi_station) {
+    stationTxt = ` (station ${meta.fwi_station}` + (dist != null ? `, ${dist} km` : "") + ")";
+    if (dist != null && dist > 30) stationTxt = `<span class="warn">${stationTxt} — éloignée</span>`;
+  }
+
   document.getElementById("freshness").innerHTML =
     `<b>${titre}</b><br>` +
     `Sentinel-2 : <b>${meta.sentinel2_asof || "?"}</b> &nbsp;·&nbsp; ` +
-    `FWI : <b>${meta.fwi_date || "?"}</b>` + (meta.fwi_station ? ` (station ${meta.fwi_station})` : "") + `<br>` +
+    `FWI : <b>${meta.fwi_date || "?"}</b>${stationTxt}<br>` +
     `Relief / végétation / enjeux : ${meta.sources_fetched || "?"}<br>` +
     `<span class="warn">Aide à la décision — classement RELATIF du risque entre zones de la commune. ` +
-    `Ce n'est pas une prédiction ni une alerte incendie.</span>`;
+    `</span>`;
 }
 
 // ---------------------------------------------------------------------------
-// Panneau : case on/off + curseur d'opacite par couche (objectif 3.5)
+// Panneau simplifie (design "maire", v2.1) : une seule couche (toujours visible,
+// juste un curseur d'opacite) + les 2 reperes vectoriels en on/off.
 // ---------------------------------------------------------------------------
-function buildPanel(layers) {
-  const list = document.getElementById("layers-list");
+function buildLayerRow(spec) {
+  const list = document.getElementById("layer-row");
   list.innerHTML = "";
+  const tl = rasterLayers[spec.id];
 
-  for (const spec of layers) {
-    const tl = rasterLayers[spec.id];
-    const row = document.createElement("div");
-    row.className = "lrow";
-    row.innerHTML =
-      `<label><input type="checkbox" ${spec.default_on ? "checked" : ""}> ` +
-      `${spec.label} <span class="unit">${spec.unit || ""}</span></label>` +
-      `<input type="range" min="0" max="100" value="${Math.round((tl.options.opacity ?? 0.85) * 100)}">`;
-    const cb = row.querySelector('input[type=checkbox]');
-    const slider = row.querySelector('input[type=range]');
-    cb.onchange = () => (cb.checked ? tl.addTo(map) : map.removeLayer(tl));
-    slider.oninput = () => tl.setOpacity(slider.value / 100);   // marche meme si la couche est masquee
-    list.appendChild(row);
-  }
+  const row = document.createElement("div");
+  row.className = "lrow";
+  row.innerHTML = `${spec.label}<input type="range" min="0" max="100" value="${Math.round((tl.options.opacity ?? 0.85) * 100)}">`;
+  row.querySelector("input").oninput = (e) => tl.setOpacity(e.target.value / 100);
+  list.appendChild(row);
 
-  // vecteurs : simple on/off (pas d'opacite)
-  for (const [key, label] of [["commune", "Contour communal"], ["priorites", "Zones prioritaires retardant"]]) {
+  for (const [key, label] of [["priorites", "Zones prioritaires retardant"], ["commune", "Contour communal"]]) {
     const vl = vectorLayers[key];
-    const row = document.createElement("div");
-    row.className = "lrow vrow";
-    row.innerHTML = `<label><input type="checkbox" checked> ${label}</label>`;
-    row.querySelector("input").onchange = (e) => (e.target.checked ? vl.addTo(map) : map.removeLayer(vl));
-    list.appendChild(row);
+    const vrow = document.createElement("div");
+    vrow.className = "lrow vrow";
+    vrow.innerHTML = `<label><input type="checkbox" checked> ${label}</label>`;
+    vrow.querySelector("input").onchange = (e) => (e.target.checked ? vl.addTo(map) : map.removeLayer(vl));
+    list.appendChild(vrow);
   }
+}
+
+// Repartition par classe + zones prioritaires (objectif "resume risques" maire).
+// Le compte "restantes" exclut les zones deja cochees "traite" (zoneStatut).
+function renderSummary(resume) {
+  const box = document.getElementById("summary-box");
+  let html = "";
+  for (const c of [4, 3, 2, 1]) {
+    const d = resume.classes[c] || { pct: 0, surface_ha: 0 };
+    html += `<div class="srow"><span class="sw" style="background:${RISK_COLORS[c]}"></span>` +
+            `${RISK_LABELS[c]} : <b>${d.pct}%</b> <span class="unit">(${d.surface_ha} ha)</span></div>`;
+  }
+  const out = computeOutstanding();
+  html += `<div class="srow" style="margin-top:6px;border-top:1px dotted rgba(255,255,255,.15);padding-top:6px">` +
+          `<b>${out.count}</b> / ${resume.zones_prioritaires} zone(s) prioritaire(s) restante(s) ` +
+          `<span class="unit">(${out.surface_ha} ha)</span></div>`;
+  box.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Zones prioritaires : liste avec case "deja traite" + clic pour s'y diriger.
+// Sur la carte : une PASTILLE numerotee (pas un contour + remplissage rouge)
+// -- sinon la zone prioritaire (deja dans une zone rouge/orange par
+// construction) se lit juste comme "encore plus de rouge", sans dire
+// POURQUOI elle est prioritaire. Le contour reste visible en pointille fin
+// et sans remplissage (juste pour voir l'etendue exacte au zoom), mais ce
+// n'est plus lui qui porte l'info -- c'est la pastille.
+// ---------------------------------------------------------------------------
+// Lien "s'y rendre" (pas de compte/cle necessaire, juste une URL Google Maps) --
+// utilise le centre deja calcule pour placer la pastille, cf. buildPrioritesLayer.
+function mapsUrl(latlng) {
+  return `https://www.google.com/maps?q=${latlng.lat.toFixed(5)},${latlng.lng.toFixed(5)}`;
+}
+
+function zoneIcon(p, done) {
+  const bg = done ? "#7f8c8d" : (RISK_COLORS[p.classe_risque_niveau] || "#c0392b");
+  return L.divIcon({
+    className: "zone-marker",
+    html: `<span style="background:${bg}">${p.id}</span>`,
+    iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -10],
+  });
+}
+
+function buildPrioritesLayer(geojson) {
+  zoneLayerByKey = {};
+  const outlines = L.geoJSON(geojson, {
+    style: () => ({ color: "#fff", weight: 1.5, dashArray: "4,3", fillOpacity: 0 }),
+    interactive: false,           // le clic se fait sur la pastille, pas le contour
+  });
+  const markers = L.layerGroup();
+  for (const f of geojson.features) {
+    const p = f.properties;
+    const center = L.geoJSON(f).getBounds().getCenter();
+    const marker = L.marker(center, { icon: zoneIcon(p, !!zoneStatut[p.zone_key]) });
+    marker.bindPopup(
+      `<div class="popup-title">Zone prioritaire #${p.id} — ${p.classe_risque}</div>` +
+      `Surface : ${(p.surface_m2 / 10000).toFixed(2)} ha<br>` +
+      `Score de priorité : ${p.score_priorite}<br>` +
+      `Enjeu le plus proche : ${p.enjeu_proche || p.categorie_enjeu || "n/a"}` +
+      (p.distance_enjeu_m != null ? ` (${p.distance_enjeu_m.toFixed(0)} m)` : "") +
+      `<div class="popup-action"><b>Action :</b><br>${p.action_recommandee}</div>` +
+      `<div class="popup-coords">${center.lat.toFixed(5)}, ${center.lng.toFixed(5)} — ` +
+      `<a href="${mapsUrl(center)}" target="_blank" rel="noopener">Ouvrir dans Google Maps</a></div>`
+    );
+    markers.addLayer(marker);
+    zoneLayerByKey[p.zone_key] = marker;
+  }
+  return L.layerGroup([outlines, markers]);
+}
+
+function renderZonesList() {
+  const box = document.getElementById("zones-list");
+  const feats = currentPriorites ? currentPriorites.features : [];
+  if (!feats.length) {
+    box.innerHTML = '<span class="hint" style="padding:6px 12px;display:block">Aucune zone prioritaire identifiée.</span>';
+    return;
+  }
+  box.innerHTML = "";
+  for (const f of feats) {
+    const p = f.properties;
+    const done = !!zoneStatut[p.zone_key];
+    const marker = zoneLayerByKey[p.zone_key];
+    const latlng = marker ? marker.getLatLng() : null;
+    const row = document.createElement("div");
+    row.className = "zrow" + (done ? " done" : "");
+    row.innerHTML =
+      `<input type="checkbox" ${done ? "checked" : ""} title="Déjà traité">` +
+      `<span class="ztxt"><span class="sw" style="background:${RISK_COLORS[p.classe_risque_niveau]}"></span>` +
+      `<span class="zclasse">Zone #${p.id} — ${p.classe_risque}</span><br>` +
+      `<span class="zdet">${(p.surface_m2 / 10000).toFixed(2)} ha` +
+      (p.enjeu_proche ? ` · ${p.enjeu_proche}` : "") + `</span>` +
+      (latlng ? `<br><a class="zlink" href="${mapsUrl(latlng)}" target="_blank" rel="noopener">` +
+                `📍 ${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}</a>` : "") +
+      `</span>`;
+    const cb = row.querySelector("input");
+    cb.onclick = (e) => e.stopPropagation();
+    cb.onchange = (e) => toggleZoneTraite(p.zone_key, e.target.checked, row);
+    const link = row.querySelector(".zlink");
+    if (link) link.onclick = (e) => e.stopPropagation();
+    row.onclick = () => flyToZone(p.zone_key);
+    box.appendChild(row);
+  }
+}
+
+function flyToZone(zoneKey) {
+  const marker = zoneLayerByKey[zoneKey];
+  if (!marker) return;
+  map.flyTo(marker.getLatLng(), 17, { duration: 0.6 });
+  marker.openPopup();
+}
+
+async function toggleZoneTraite(zoneKey, traite, row) {
+  row.classList.toggle("done", traite);
+  if (traite) zoneStatut[zoneKey] = "en cours"; else delete zoneStatut[zoneKey];
+  const marker = zoneLayerByKey[zoneKey];
+  const feat = currentPriorites && currentPriorites.features.find((f) => f.properties.zone_key === zoneKey);
+  if (marker && feat) marker.setIcon(zoneIcon(feat.properties, traite));
+  renderSummary(currentResume);
+  refreshBanner();
+  try {
+    await fetch(`/api/communes/${currentInsee}/zones/${encodeURIComponent(zoneKey)}/statut`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ traite }),
+    });
+  } catch (e) { /* reseau indisponible : l'etat visuel reste, la coche sera reproposee au rechargement */ }
+}
+
+// ---------------------------------------------------------------------------
+// Alarme (design "maire") : bandeau visible tant qu'il reste au moins une zone
+// NON traitee. Contenu toujours a jour (recalcule a chaque coche / generation) -
+// la cadence "hebdomadaire" demandee par SELVERT s'applique a la notification
+// par email (a venir), pas a cet affichage qui reste live.
+// ---------------------------------------------------------------------------
+function computeOutstanding() {
+  const feats = currentPriorites ? currentPriorites.features.filter((f) => !zoneStatut[f.properties.zone_key]) : [];
+  const surface_ha = feats.reduce((s, f) => s + (f.properties.surface_m2 || 0), 0) / 10000;
+  return { count: feats.length, surface_ha: Math.round(surface_ha * 10) / 10, feats };
+}
+
+function refreshBanner() {
+  const el = document.getElementById("alert-banner");
+  const out = computeOutstanding();
+  if (bannerDismissed || !out.count) { el.style.display = "none"; return; }
+  el.innerHTML =
+    `<span class="close-x">✕</span>` +
+    `⚠ <b>${out.count} zone(s) prioritaire(s)</b> à traiter au retardant` +
+    (currentNom ? ` à ${currentNom}` : "") + ` — ${out.surface_ha} ha au total.` +
+    `<br><span style="text-decoration:underline">Voir sur la carte</span>`;
+  el.querySelector(".close-x").onclick = (e) => {
+    e.stopPropagation();
+    bannerDismissed = true;
+    el.style.display = "none";
+  };
+  el.onclick = () => {
+    const layers = out.feats.map((f) => zoneLayerByKey[f.properties.zone_key]).filter(Boolean);
+    if (layers.length) map.flyToBounds(L.featureGroup(layers).getBounds(), { maxZoom: 16, duration: 0.6 });
+  };
+  el.style.display = "block";
 }
 
 // ---------------------------------------------------------------------------
@@ -455,18 +700,35 @@ async function onMapClick(e) {
   renderValue(data);
 }
 
+// Detail complet au point clique (objectif 3.4 du cahier - conserve tel quel a
+// la demande de Nicolas, juste reskinne en fiche au lieu d'un tableau brut).
+const CARD = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const VALUE_ROWS = [
+  ["risk",            "Score de risque (continu)",  (v) => v == null ? "—" : v.toFixed(3)],
+  ["secheresse_ndmi", "Humidité du couvert (NDMI)", (v) => v == null ? "—" : v.toFixed(2)],
+  ["vigueur_ndvi",    "Vigueur végétation (NDVI)",  (v) => v == null ? "—" : v.toFixed(2)],
+  ["fwi",             "Danger météo (FWI)",         (v) => v == null ? "—" : v.toFixed(1)],
+  ["pente",           "Pente",                      (v) => v == null ? "—" : v.toFixed(1) + " °"],
+  ["exposition",      "Exposition",                 (v) => v == null ? "—" : Math.round(v) + " ° (" + CARD[Math.round((v % 360) / 45) % 8] + ")"],
+  ["combustible",     "Combustible (végétation)",   (v) => v == null ? "—" : v.toFixed(2)],
+  ["enjeux",          "Distance aux enjeux",        (v) => v == null ? "—" : Math.round(v) + " m"],
+];
+
 function renderValue(data) {
   const box = document.getElementById("value-box");
   if (!data.dans_commune) {
     box.innerHTML = '<span class="hint">Point hors de la commune.</span>';
     return;
   }
-  let html = `<div class="coords">${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}</div><table>`;
-  for (const spec of layerSpecs) {
-    const fmt = VALUE_FMT[spec.id] || ((v) => (v == null ? "—" : String(v)));
-    html += `<tr><td>${spec.label}</td><td>${fmt(data.valeurs[spec.id])}</td></tr>`;
+  const c = data.valeurs["risk_classes"];   // classe brute (exacte), pas la version lissee affichee
+  const label = RISK_LABELS[c] || "—";
+  const color = RISK_COLORS[c] || "#999";
+  let html = `<div class="coords">${data.lat.toFixed(5)}, ${data.lon.toFixed(5)}</div><dl>` +
+             `<dd class="risk-line"><span class="sw" style="background:${color}"></span><b>${label}</b></dd>`;
+  for (const [id, lbl, fmt] of VALUE_ROWS) {
+    html += `<dt>${lbl}</dt><dd>${fmt(data.valeurs[id])}</dd>`;
   }
-  box.innerHTML = html + "</table>";
+  box.innerHTML = html + "</dl>";
 }
 
 // ---------------------------------------------------------------------------

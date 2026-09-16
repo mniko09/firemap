@@ -17,6 +17,7 @@ pillow==12.3.0
 # --- Cartographie / rendu ---
 folium==0.20.0
 matplotlib==3.11.1
+reportlab==5.0.1
 
 # --- API ---
 fastapi==0.141.1

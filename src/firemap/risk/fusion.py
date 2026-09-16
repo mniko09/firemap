@@ -5,6 +5,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 import rasterio
+from scipy.ndimage import uniform_filter
 
 from .. import config
 
@@ -107,3 +108,17 @@ def classify_risk(risk: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, Tuple
     r = risk[m]
     classes[m] = np.where(r <= q1, 1, np.where(r <= q2, 2, np.where(r <= q3, 3, 4)))
     return classes, (float(q1), float(q2), float(q3))
+
+
+def smooth_risk_classes(classes: np.ndarray, size: int = 3) -> np.ndarray:
+    """Lissage majoritaire (fenetre size x size) : chaque pixel prend la classe la
+    plus representee dans son voisinage, plutot que sa propre classe brute.
+    Uniquement pour l'AFFICHAGE (carte grand public) - la couche brute reste la
+    reference pour le clic-valeur, le resume chiffre et les zones prioritaires."""
+    mask = classes != 0
+    votes = np.stack([
+        uniform_filter((classes == c).astype("float32"), size=size, mode="constant")
+        for c in (1, 2, 3, 4)
+    ])
+    dominant = (votes.argmax(axis=0) + 1).astype("uint8")
+    return np.where(mask, dominant, 0).astype("uint8")

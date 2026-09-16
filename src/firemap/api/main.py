@@ -6,6 +6,10 @@
   GET  /api/communes/{insee}/status        etat + fraicheur d'une commune
   POST /api/communes/{insee}/generate      met une generation en file (tache de fond)
   GET  /api/communes/{insee}/layers|bounds|metadata|priorites|commune|value|layers/{id}/{z}/{x}/{y}.png
+  GET  /api/communes/{insee}/risque/resume         chiffres cles (resume + alarme)
+  GET  /api/communes/{insee}/zones/statut          checklist "deja traite" des zones
+  POST /api/communes/{insee}/zones/{zone_key}/statut
+  GET  /api/communes/{insee}/rapport.pdf           export PDF (carte + resume + zones)
   GET  /api/refresh/scan                   declenche une passe de rafraichissement
   GET  /                                   frontend statique (web/)
 """
@@ -20,6 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from .. import config, jobs, registry, scheduler
 from .routes_communes import router as communes_router
 from .routes_layers import router as layers_router
+from .routes_report import router as report_router
+from .routes_zones import router as zones_router
 
 try:
     __version__ = _pkg_version("firemap")
@@ -44,6 +50,8 @@ app.add_middleware(
 )
 app.include_router(communes_router)
 app.include_router(layers_router)
+app.include_router(zones_router)
+app.include_router(report_router)
 
 
 # ---------------------------------------------------------------------------

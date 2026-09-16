@@ -15,6 +15,7 @@ le rendu visuel (PNG/tuiles) sera fait proprement en Phase 2 v2.
 """
 import datetime as dt
 import json
+import math
 import os
 import traceback
 import warnings
@@ -38,7 +39,7 @@ from .ingestion.fwi import compute_fwi_series, fetch_daily_weather, nearest_open
 from .ingestion.landcover import assign_fuel_weight, fetch_vegetation_zones
 from .ingestion.mnt import compute_slope_aspect, fetch_elevation
 from .ingestion.sentinel2 import fetch_ndvi_ndmi
-from .risk.fusion import classify_risk, compute_risk, read_layer
+from .risk.fusion import classify_risk, compute_risk, read_layer, smooth_risk_classes
 from .risk.priorisation import compute_priorite, extract_priority_zones
 from .storage import LAYERS as _LAYER_SPECS
 
@@ -93,6 +94,17 @@ def _save_raster(path, array, grid, dtype="float32", nodata=None) -> None:
 def _read_metadata(ctx: CommuneContext) -> dict:
     p = ctx.metadata_path
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distance a vol d'oiseau (km) -- pour signaler une station meteo eloignee,
+    pas pour un calcul geodesique precis (l'ecart avec une projection est
+    negligeable a cette echelle)."""
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi, dlmb = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
 
 
 def _merge_metadata(ctx: CommuneContext, **fields) -> dict:
@@ -268,10 +280,12 @@ def _step_fwi(ctx, grid, gdf_wgs84, force) -> str | None:
     current_fwi = float(last["FWI"])
     _save_raster(fwi_p, np.full((grid.height, grid.width), current_fwi, dtype="float32"), grid)
 
+    station_distance_km = round(_haversine_km(centroid.y, centroid.x, station["lat"], station["lon"]), 1)
     fwi_date = last["DATE"].date().isoformat()
     _merge_metadata(ctx, fwi_date=fwi_date, fwi_value=round(current_fwi, 1),
-                    fwi_station=f"{station['nom']} ({station['id']})")
-    _log(ctx, f"FWI {current_fwi:.1f} (station {station['nom']}, {fwi_date})")
+                    fwi_station=f"{station['nom']} ({station['id']})",
+                    fwi_station_distance_km=station_distance_km)
+    _log(ctx, f"FWI {current_fwi:.1f} (station {station['nom']} a {station_distance_km:.1f} km, {fwi_date})")
     return fwi_date
 
 
@@ -280,12 +294,13 @@ def _step_risk(ctx, grid, mask, pts_l93, force):
     risk x proximite enjeux -> priorites.geojson (zones a traiter en priorite)."""
     risk_p = ctx.processed("risk.tif")
     classes_p = ctx.processed("risk_classes.tif")
+    lisse_p = ctx.processed("risk_classes_lisse.tif")
     prio_p = ctx.processed("priorites.geojson")
     inputs = [ctx.processed(n) for n in
               ("ndvi.tif", "ndmi.tif", "fwi.tif", "slope.tif", "aspect.tif", "fuel.tif", "enjeux.tif")]
     # (re)calcule si un resultat manque OU si une couche source est plus recente
     # (cas du rafraichissement : fwi.tif vient d'etre regenere)
-    if not force and _present(classes_p, prio_p) and not _outdated(risk_p, *inputs):
+    if not force and _present(classes_p, lisse_p, prio_p) and not _outdated(risk_p, *inputs):
         return
 
     layers = compute_risk(mask, processed_dir=ctx.processed_dir)
@@ -294,6 +309,7 @@ def _step_risk(ctx, grid, mask, pts_l93, force):
 
     risk_classes, (q1, q2, q3) = classify_risk(risk, valid_mask)
     _save_raster(classes_p, risk_classes, grid, dtype="uint8", nodata=0)
+    _save_raster(lisse_p, smooth_risk_classes(risk_classes), grid, dtype="uint8", nodata=0)
 
     priorite = compute_priorite(risk, read_layer("enjeux.tif", ctx.processed_dir), valid_mask)
     zones = extract_priority_zones(priorite, risk_classes, valid_mask, grid, pts_l93)

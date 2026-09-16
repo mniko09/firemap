@@ -81,6 +81,7 @@ def extract_priority_zones(
                 "surface_m2": round(area_m2, 1),
                 "score_priorite": round(mean_score, 3),
                 "classe_risque": RISK_LABELS[mean_class],
+                "classe_risque_niveau": mean_class,  # 1-4, pour la couleur cote frontend
                 "enjeu_proche": enjeu_nom,
                 "categorie_enjeu": enjeu_categorie,
                 "distance_enjeu_m": round(enjeu_distance, 1) if enjeu_distance is not None else None,
@@ -91,4 +92,12 @@ def extract_priority_zones(
     gdf = gpd.GeoDataFrame(records, crs=grid.crs)
     gdf = gdf.sort_values("score_priorite", ascending=False).head(max_zones).reset_index(drop=True)
     gdf.insert(0, "id", range(1, len(gdf) + 1))
+    # Cle STABLE d'une generation a l'autre (contrairement a "id", qui depend du
+    # tri par score et se decale donc a chaque rafraichissement) : le centroide
+    # arrondi a la resolution de la grille. Sert a retenir "deja traite" (cf.
+    # zone_status.py) sans qu'un refresh 12h ne fasse perdre/melanger l'etat.
+    res = grid.resolution
+    gdf["zone_key"] = gdf.geometry.centroid.apply(
+        lambda c: f"{round(c.x / res) * res:.0f}_{round(c.y / res) * res:.0f}"
+    )
     return gdf

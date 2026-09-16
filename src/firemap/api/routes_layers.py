@@ -11,6 +11,7 @@ Le rendu (colormap + plage) vient de firemap.storage.LAYERS : une seule source
 de verite pour la symbologie, partagee avec le legacy.
 """
 import io
+import json
 from functools import lru_cache
 
 import numpy as np
@@ -36,6 +37,12 @@ router = APIRouter(prefix="/api/communes/{insee}", tags=["couches"])
 _TILE_CACHE = {"Cache-Control": "public, max-age=604800, immutable"}
 
 _LAYER_BY_ID = {s.id: s for s in LAYERS}
+
+# Design v2.1 "maire" : une seule couche exposee au selecteur public (la version
+# lissee du risque). Les autres (ndvi, pente, fwi...) restent calculees et
+# servies par leur route de tuile / /value si on les appelle directement par id
+# -- juste plus jamais annoncees ni requetees par l'interface.
+_PUBLIC_LAYER_ID = "risk_lisse"
 _TO_L93 = Transformer.from_crs(config.CRS_WEB, config.CRS_COMPUTE, always_xy=True)
 
 # Couleurs des 4 classes de risque (0 = hors commune -> transparent).
@@ -89,13 +96,13 @@ def _range_for(ctx: CommuneContext, spec) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 @router.get("/layers")
 def list_layers(insee: str):
-    """Couches effectivement disponibles pour cette commune."""
+    """Couche publique disponible pour cette commune (une seule, cf. _PUBLIC_LAYER_ID)."""
     ctx = _ctx(insee)
-    return [
-        {"id": s.id, "label": s.label, "unit": s.unit,
-         "categorical": s.categorical, "default_on": s.default_on}
-        for s in LAYERS if ctx.processed(s.filename).exists()
-    ]
+    spec = _LAYER_BY_ID[_PUBLIC_LAYER_ID]
+    if not ctx.processed(spec.filename).exists():
+        return []
+    return [{"id": spec.id, "label": spec.label, "unit": spec.unit,
+             "categorical": spec.categorical, "default_on": True}]
 
 
 @router.get("/layers/{layer_id}/{z}/{x}/{y}.png")
@@ -145,6 +152,42 @@ def get_metadata(insee: str):
 def get_priorites(insee: str):
     ctx = _ctx(insee)
     return FileResponse(ctx.processed("priorites.geojson"), media_type="application/geo+json")
+
+
+@router.get("/risque/resume")
+def risque_resume(insee: str):
+    """Chiffres cles pour un lecteur non-expert (maire) : repartition par classe de
+    risque (sur la couche BRUTE risk_classes -- pas la version lissee affichee sur
+    la carte, pour des pourcentages exacts) + zones prioritaires retardant."""
+    ctx = _ctx(insee)
+    with rasterio.open(ctx.processed("risk_classes.tif")) as src:
+        arr = src.read(1)
+        pixel_area_ha = abs(src.res[0] * src.res[1]) / 10_000
+
+    total = int((arr != 0).sum())
+    classes = {}
+    for c in (1, 2, 3, 4):
+        n = int((arr == c).sum())
+        classes[str(c)] = {
+            "pct": round(100 * n / total, 1) if total else 0.0,
+            "surface_ha": round(n * pixel_area_ha, 1),
+        }
+
+    prio_path = ctx.processed("priorites.geojson")
+    zones_prioritaires, surface_prioritaire_ha = 0, 0.0
+    if prio_path.exists():
+        feats = json.loads(prio_path.read_text(encoding="utf-8")).get("features", [])
+        zones_prioritaires = len(feats)
+        surface_prioritaire_ha = round(
+            sum(f["properties"].get("surface_m2", 0) for f in feats) / 10_000, 1
+        )
+
+    return {
+        "classes": classes,
+        "surface_totale_ha": round(total * pixel_area_ha, 1),
+        "zones_prioritaires": zones_prioritaires,
+        "surface_prioritaire_ha": surface_prioritaire_ha,
+    }
 
 
 @router.get("/commune")

@@ -11,6 +11,7 @@ Au demarrage, on s'assure aussi que les communes "prioritaires"
 c'est le socle "toujours pret" pour les demonstrations commerciales.
 """
 import json
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -98,6 +99,19 @@ def ensure_priority_communes() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+def _add_refresh_job(scheduler: BackgroundScheduler) -> None:
+    """Enregistre le job periodique. Premiere execution dans _INTERVAL_HOURS (pas
+    immediatement au demarrage, pour eviter une rafale a chaque redemarrage) --
+    ATTENTION : next_run_time=None ne fait PAS ca, ca ajoute le job EN PAUSE
+    (APScheduler ne le relance jamais tout seul, il faut une vraie date).
+    cf. tests/test_scheduler.py qui verifie que ce piege ne revient pas."""
+    scheduler.add_job(
+        refresh_scan, "interval", hours=_INTERVAL_HOURS,
+        id="refresh_scan", max_instances=1, coalesce=True,
+        next_run_time=datetime.now() + timedelta(hours=_INTERVAL_HOURS),
+    )
+
+
 def start_scheduler() -> None:
     """Demarre le planificateur (idempotent). A appeler au demarrage de l'API."""
     global _scheduler
@@ -106,11 +120,7 @@ def start_scheduler() -> None:
     ensure_priority_communes()
 
     _scheduler = BackgroundScheduler(daemon=True)
-    _scheduler.add_job(
-        refresh_scan, "interval", hours=_INTERVAL_HOURS,
-        id="refresh_scan", max_instances=1, coalesce=True,
-        next_run_time=None,   # pas de scan au demarrage (evite une rafale a chaque redemarrage)
-    )
+    _add_refresh_job(_scheduler)
     _scheduler.start()
     print(f"[scheduler] rafraichissement auto toutes les {_INTERVAL_HOURS} h", flush=True)
 

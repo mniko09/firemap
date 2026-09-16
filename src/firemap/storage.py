@@ -39,8 +39,15 @@ class LayerSpec:
 
 
 LAYERS = [
-    LayerSpec("risk_classes", "Risque incendie (4 classes)", "risk_classes.tif", "classe",
+    # Seule couche exposee a l'interface publique (v2.1, design "maire") : version
+    # lissee (fusion.smooth_risk_classes) du risque 4 classes, pour un rendu plus
+    # continu que le brut pixel-a-pixel. cf. routes_layers._PUBLIC_LAYER_ID.
+    LayerSpec("risk_lisse", "Risque incendie", "risk_classes_lisse.tif", "classe",
               categorical=True, default_on=True),
+    # Couche brute (non lissee) : plus exposee dans le selecteur, mais toujours
+    # calculee et servie via /value (clic) et /risque/resume (chiffres exacts).
+    LayerSpec("risk_classes", "Risque incendie (brut, non lisse)", "risk_classes.tif", "classe",
+              categorical=True, default_on=False),
     LayerSpec("risk", "Score de risque (continu)", "risk.tif", "0-1", cmap="RdYlGn_r", vmin=0, vmax=1),
     LayerSpec("secheresse_ndmi", "Humidite du couvert (NDMI)", "ndmi.tif", "indice", cmap="BrBG", vmin=-1, vmax=1),
     LayerSpec("vigueur_ndvi", "Vigueur vegetation (NDVI)", "ndvi.tif", "indice", cmap="RdYlGn", vmin=-1, vmax=1),
